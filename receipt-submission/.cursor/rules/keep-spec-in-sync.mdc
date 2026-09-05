@@ -1,0 +1,23 @@
+---
+description: Keep the receipt-submission spec accurate whenever product behaviour changes
+alwaysApply: true
+---
+
+# Keep the spec in sync
+
+Whenever you change behaviour, architecture, auth, APIs, data model, configuration,
+deployment, or iOS/server UX in this repo, update
+[`specs/003-receipt-submission/spec.md`](../../../specs/003-receipt-submission/spec.md)
+in the **same change**. It lives in the repository root alongside the specs for
+the rest of the accounting stack; `docs/SPEC.md` is now only a pointer to it.
+
+- Treat that spec as the source of truth for how the system works *as built*.
+- Its numbered sections (§1–§12) are the detailed behaviour; user stories and
+  requirements sit above them. Update whichever the change actually affects —
+  a behaviour change usually touches a numbered section, and sometimes an
+  acceptance scenario or FR too.
+- Prefer editing the relevant section over appending a changelog.
+- Remove obsolete claims (do not leave “formerly…” cruft unless it explains a
+  deliberate design choice that still matters).
+- If `README.md` duplicates the same operator-facing detail, update that too.
+- Do not wait to be asked — updating the spec is part of finishing the task.

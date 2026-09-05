@@ -1,0 +1,11 @@
+node_modules/
+.next/
+data/
+.env
+.env.*
+.DS_Store
+.git/
+*.md
+deploy-docker.sh
+AGENTS.md
+CLAUDE.md

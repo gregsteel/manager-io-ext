@@ -1,0 +1,54 @@
+flowchart TB
+    subgraph Cowork["Claude Cowork — scheduled, cloud-hosted"]
+        RI["Receipt Intake<br/><small>daily · analyse + post purchase invoices</small>"]
+        IW["Invoice Watch<br/><small>daily · label:lilith is:unread</small>"]
+        DA["Director Advances<br/><small>on demand · manager-mcp only</small>"]
+    end
+
+    Greg(["Greg<br/>sole operator"])
+
+    GW["home-gateway<br/><small>nginx reverse proxy · public TLS</small>"]
+
+    subgraph MCP["MCP servers — authenticated (Google OAuth + email allowlist)"]
+        GRM["gmail-relay-mcp<br/><small>search_gmail · relay_attachment</small>"]
+        RCM["receipts<br/><small>MCP tools · web review UI · data volume</small>"]
+        MGM["manager-mcp<br/><small>create_purchase_invoice · create_journal_entry · list_records</small>"]
+    end
+
+    RI -->|create_purchase_invoice, attach_receipt| RCM
+    RI -->|create_purchase_invoice, list_records| MGM
+    IW -->|search_gmail| GRM
+    IW -->|create_receipt| RCM
+    IW -->|list_records: payments| MGM
+    DA -->|create_journal_entry, categorize| MGM
+
+    RI & IW & DA -.-> GW
+    GW -.-> MCP
+
+    GRM -->|Gmail API, OAuth: gmail.modify| Gmail
+    MGM -->|"REST http://manager:8080/api2<br/>(internal docker network)"| Manager
+    MGM -->|"hourly: GET /check-for-new-transactions<br/>(mcp user, HTTP Basic)"| Manager
+
+    GRM ==>|"relay_attachment(): download, convert, upload —<br/>bytes skip Cowork entirely"| RCM
+
+    RCM ~~~ Gmail
+    RCM ~~~ Manager
+
+    subgraph Ext["External systems"]
+        Gmail[("Gmail<br/><small>external · Google Workspace</small>")]
+        Manager[("Manager.io Desktop<br/><small>source of truth, port 55667</small>")]
+    end
+
+    Cowork -.->|push notification: end-of-run summary| Greg
+    Greg -.->|"browser: receipts.lilith.com.au/review/&lt;id&gt;, via gateway"| GW
+
+    classDef task fill:#dcece9,stroke:#2f7a72,color:#1c2733
+    classDef watch fill:#e9e2f1,stroke:#6a4c93,color:#1c2733
+    classDef advance fill:#e1e7f1,stroke:#3a5a8c,color:#1c2733
+    classDef ext fill:none,stroke:#8a94a3,stroke-dasharray: 4 3,color:#1c2733
+    classDef highlight stroke:#c1652f,stroke-width:2px
+
+    class RI task
+    class IW watch
+    class DA advance
+    class Gmail,Manager ext

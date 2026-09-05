@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gmail-relay"
+version = "0.1.0"
+description = "MCP server: Gmail search + Gmail/Drive file relay to receipt-submission"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+  "fastmcp>=2.0",
+  "httpx",
+]
+
+[project.scripts]
+gmail-relay = "gmail_relay.server:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "pytest-asyncio",
+  "respx",
+  "ruff",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gmail_relay"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

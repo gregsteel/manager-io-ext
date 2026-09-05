@@ -1,0 +1,127 @@
+# Accounting stack: Manager.io, receipt-submission, manager-mcp, gmail-relay.
+#
+# Deliberately separate from home-gateway (see ../lilith-accounting/docs/
+# ACCOUNTING_PLATFORM_DEPLOYMENT_SPEC.md §2-4). This project owns none of the
+# public TLS/hostname surface — home-gateway reaches these services via
+# host-published ports (host.docker.internal from its side).
+#
+# Host port bindings are unrestricted (0.0.0.0), matching receipt-submission's
+# existing deploy-docker.sh convention. If you want them loopback-only, bind
+# "127.0.0.1:PORT:..." instead, but verify home-gateway's nginx can still
+# reach them via host.docker.internal under Colima before relying on that —
+# host.docker.internal's ability to reach 127.0.0.1-bound host ports is a
+# Docker Desktop behavior on macOS and is not guaranteed identical under
+# Colima's Lima-VM networking.
+#
+# Host ports below are hardcoded, not env-overridable: they're a fixed
+# contract with home-gateway's MANAGER_UPSTREAM / MANAGER_MCP_UPSTREAM /
+# RECEIPTS_UPSTREAM (home-gateway/.env.example). Changing one here without
+# changing it there breaks routing silently.
+#
+# Secrets and bind-mount data live under ./secrets and ./data at the repo
+# root, alongside this file and deploy.sh.
+
+name: accounting
+
+services:
+  manager:
+    # Built from a fork (chrborg/manager.io's published download URL was
+    # stale, pinned to an old Manager version) rather than pulled — see
+    # https://github.com/gregsteel/docker-manager.io/tree/update-manager
+    # (vendored in as the docker-manager.io submodule, pinned to that branch)
+    build:
+      context: ./docker-manager.io
+    container_name: accounting-manager
+    restart: unless-stopped
+    ports:
+      - "55667:8080"
+    volumes:
+      - ${MANAGER_DATA_DIR:-./data/manager}:/data
+    # No documented env-based API token config for this image (per Docker Hub
+    # description, only the /data mount is documented). The API access token
+    # is generated inside the Manager UI itself (spec §6 step 7), not set here.
+
+  manager-mcp:
+    build:
+      context: ./manager-mcp
+    container_name: accounting-manager-mcp
+    restart: unless-stopped
+    depends_on:
+      - manager
+    ports:
+      - "55668:8080"
+    env_file:
+      - ./secrets/manager-mcp.env
+    environment:
+      MANAGER_MCP_TRANSPORT: http
+      MANAGER_MCP_HTTP_HOST: 0.0.0.0
+      MANAGER_MCP_HTTP_PORT: "8080"
+      # Container defaults to UTC otherwise, so `docker compose logs` shows
+      # GMT timestamps that don't match the business's local time.
+      TZ: Australia/Melbourne
+      # Container-to-container traffic uses the manager service's *internal*
+      # Docker DNS name/port (8080), never the host-published port (55667) —
+      # nothing inside manager's own network namespace listens on 55667.
+      MANAGER_API_URL: http://manager:8080/api2
+      # Hourly trigger of Manager's bank-feed import ("Check for New
+      # Transactions" / Aussie Bank Feeds). Runs inside this process, not as
+      # a Cowork task. Unset or 0 disables it (stdio/dev default).
+      MANAGER_MCP_BANK_FEED_SYNC_INTERVAL_SECONDS: "3600"
+
+  receipts:
+    build:
+      context: ./receipt-submission
+    container_name: accounting-receipts
+    restart: unless-stopped
+    ports:
+      - "55666:55666"
+    volumes:
+      - ${RECEIPTS_DATA_DIR:-./data/receipts}:/app/data
+    env_file:
+      - ./secrets/receipts.env
+    environment:
+      APP_ENV: prod
+      DATA_DIR: /app/data
+
+  gmail-relay:
+    # Sibling package (./gmail-relay) — a FastMCP server (search + relay-to-
+    # Receipts exposed as MCP tools, not plain REST) secured the same way as
+    # manager-mcp: AllowlistedGoogleProvider, i.e. the MCP OAuth spec plus an
+    # email allowlist (see manager-mcp/src/manager_mcp/http_auth.py, mirrored
+    # in gmail-relay/src/gmail_relay/http_auth.py).
+    #
+    # Two distinct Google OAuth clients are involved, not one:
+    #   - secrets/gmail/credentials.json: Gmail + Drive API access
+    #     via gmail.modify (read messages/attachments, mark a message read
+    #     after its attachment is relayed) and drive (download a file and
+    #     delete it after a successful Receipts relay). Self-contained (holds
+    #     its own client_id/secret/refresh_token) and minted once via
+    #     ./gmail-relay/scripts/gmail_oauth_init.py (stdlib-only OAuth
+    #     loopback flow — no npm/klodr dependency at runtime or setup time).
+    #     secrets/gmail/gcp-oauth.keys.json is only that script's
+    #     input, not read by the running container — GMAIL_OAUTH_KEYS_PATH
+    #     isn't a thing.
+    #   - GMAIL_RELAY_OAUTH_GOOGLE_CLIENT_ID/SECRET (in gmail-relay.env): a
+    #     *separate* OAuth client that gates who may connect to this server as
+    #     an MCP client at all (checked against GMAIL_RELAY_ALLOWED_EMAILS).
+    build:
+      context: ./gmail-relay
+    container_name: accounting-gmail-relay
+    restart: unless-stopped
+    ports:
+      - "55669:8080"
+    volumes:
+      - ./secrets/gmail:/secrets:ro
+      - gmail-relay-tmp:/data/tmp
+    env_file:
+      - ./secrets/gmail-relay.env
+    environment:
+      GMAIL_RELAY_TRANSPORT: http
+      GMAIL_RELAY_HTTP_HOST: 0.0.0.0
+      GMAIL_RELAY_HTTP_PORT: "8080"
+      GMAIL_CREDENTIALS_PATH: /secrets/credentials.json
+      RELAY_DOWNLOAD_DIR: /data/tmp
+      RELAY_MAX_ATTACHMENT_BYTES: "15728640"
+
+volumes:
+  gmail-relay-tmp:

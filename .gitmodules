@@ -1,0 +1,8 @@
+[submodule "manager-mcp"]
+	path = manager-mcp
+	url = git@github.com:gregsteel/manager-mcp.git
+	branch = mcp-server
+[submodule "docker-manager.io"]
+	path = docker-manager.io
+	url = git@github.com:gregsteel/docker-manager.io.git
+	branch = update-manager
