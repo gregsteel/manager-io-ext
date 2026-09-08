@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-time Gmail + Drive OAuth setup — mints deployment/secrets/gmail/credentials.json.
+"""One-time Gmail + Drive OAuth setup — mints secrets/gmail/credentials.json.
 
 Standard OAuth2 "installed app" loopback flow, stdlib only (no npm, no
 klodr/gmail-mcp, no google-auth-oauthlib): open a consent URL, catch Google's
@@ -15,10 +15,10 @@ any scope change — a refresh token is bound to what was granted at consent.
 Usage (from the repo root):
     python3 gmail-relay/scripts/gmail_oauth_init.py [--scopes gmail.modify,drive] [--out PATH]
 
-Reads:  deployment/secrets/gmail/gcp-oauth.keys.json (downloaded from Google
+Reads:  secrets/gmail/gcp-oauth.keys.json (downloaded from Google
         Cloud Console: APIs & Services > Credentials > OAuth client ID >
         Desktop app). Paths are relative to the repo root.
-Writes: deployment/secrets/gmail/credentials.json (mode 0600)
+Writes: secrets/gmail/credentials.json (mode 0600)
 """
 
 from __future__ import annotations
@@ -36,8 +36,8 @@ from pathlib import Path
 
 AUTH_URI = "https://accounts.google.com/o/oauth2/v2/auth"
 SCOPE_PREFIX = "https://www.googleapis.com/auth/"
-DEFAULT_KEYS_PATH = Path("deployment/secrets/gmail/gcp-oauth.keys.json")
-DEFAULT_OUT_PATH = Path("deployment/secrets/gmail/credentials.json")
+DEFAULT_KEYS_PATH = Path("secrets/gmail/gcp-oauth.keys.json")
+DEFAULT_OUT_PATH = Path("secrets/gmail/credentials.json")
 
 
 class _CallbackHandler(http.server.BaseHTTPRequestHandler):
