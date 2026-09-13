@@ -65,6 +65,7 @@ export async function POST(
 
   const merged = mergeAnalysis(receipt.analysisJson, {
     vendor: asString(body.vendor),
+    abn: asString(body.abn),
     date: asString(body.date),
     dueDate: asString(body.dueDate),
     total: asNumberOrNull(body.total),

@@ -151,7 +151,7 @@ const TOOLS = [
   {
     name: "save_analysis",
     description:
-      "Persist analysis for a receipt (vendor, date, dueDate, totals, tax, notes, etc.). Include dueDate (ISO-8601, e.g. from payment terms printed on the receipt/invoice) whenever it's available so it can carry through to the accounting system.",
+      "Persist analysis for a receipt (vendor, abn, date, dueDate, totals, tax, notes, etc.). Include dueDate (ISO-8601, e.g. from payment terms printed on the receipt/invoice) whenever it's available so it can carry through to the accounting system. Include abn (the vendor's Australian Business Number, printed on most AU receipts/invoices, usually 11 digits with or without spaces) whenever it's printed on the receipt.",
     inputSchema: {
       type: "object",
       required: ["id", "analysis"],
@@ -159,7 +159,7 @@ const TOOLS = [
         id: { type: "string" },
         analysis: {
           description:
-            "JSON object with extracted fields, e.g. { vendor, date, dueDate, total, currency, reference, notes, items }",
+            "JSON object with extracted fields, e.g. { vendor, abn, date, dueDate, total, currency, reference, notes, items }",
         },
       },
     },

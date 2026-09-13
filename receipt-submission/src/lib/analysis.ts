@@ -14,6 +14,7 @@ export type ReceiptLineItem = {
 
 export type ReceiptAnalysis = {
   vendor: string;
+  abn: string;
   date: string;
   dueDate: string;
   total: number | null;
@@ -43,6 +44,7 @@ export function needsHumanReview(analysis: ParsedReceiptAnalysis): boolean {
 }
 
 const VENDOR_KEYS = ["vendor", "merchant", "store", "supplier"];
+const ABN_KEYS = ["abn", "vendorAbn", "supplierAbn", "businessNumber", "australianBusinessNumber"];
 const DATE_KEYS = ["date", "purchaseDate", "transactionDate", "receiptDate"];
 const DUE_DATE_KEYS = ["dueDate", "due_date", "paymentDueDate", "dueBy"];
 const TOTAL_KEYS = ["total", "grandTotal", "amount", "amountTotal"];
@@ -129,6 +131,7 @@ function parseItem(value: unknown): ReceiptLineItem | null {
 export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
   const empty: ParsedReceiptAnalysis = {
     vendor: "",
+    abn: "",
     date: "",
     dueDate: "",
     total: null,
@@ -145,6 +148,7 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
   if (!isPlainObject(obj)) return empty;
 
   const vendor = firstString(obj, VENDOR_KEYS);
+  const abn = firstString(obj, ABN_KEYS);
   const date = firstString(obj, DATE_KEYS);
   const dueDate = firstString(obj, DUE_DATE_KEYS);
   const total = firstNumber(obj, TOTAL_KEYS);
@@ -171,6 +175,7 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
 
   return {
     vendor,
+    abn,
     date,
     dueDate,
     total,
@@ -200,6 +205,7 @@ export function mergeAnalysis(
   return {
     ...base,
     vendor: edits.vendor,
+    abn: edits.abn,
     date: edits.date,
     dueDate: edits.dueDate,
     total: edits.total,

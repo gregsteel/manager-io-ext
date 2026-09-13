@@ -38,6 +38,7 @@ export function ReceiptReview({
   analysis: ParsedReceiptAnalysis;
 }) {
   const [vendor, setVendor] = useState(analysis.vendor);
+  const [abn, setAbn] = useState(analysis.abn);
   const [date, setDate] = useState(analysis.date);
   const [dueDate, setDueDate] = useState(analysis.dueDate);
   const [total, setTotal] = useState(analysis.total ?? "");
@@ -135,6 +136,7 @@ export function ReceiptReview({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vendor,
+          abn,
           date,
           dueDate,
           total: total === "" ? null : Number(total),
@@ -254,6 +256,15 @@ export function ReceiptReview({
               onChange={(e) => setVendor(e.target.value)}
               className="rounded-lg border border-black/10 bg-surface px-3 py-2 text-foreground"
               placeholder="Vendor name"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-muted">ABN</span>
+            <input
+              value={abn}
+              onChange={(e) => setAbn(e.target.value)}
+              className="rounded-lg border border-black/10 bg-surface px-3 py-2 text-foreground"
+              placeholder="Vendor's ABN"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">

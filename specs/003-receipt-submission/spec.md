@@ -754,6 +754,7 @@ or `mergeAnalysis` looks at the result.
 
 `src/lib/analysis.ts` — used only by the review page (§9.3), not by `/mcp`
 — reads the parsed object leniently (aliasing `vendor`/`merchant`/`store`,
+`abn`/`vendorAbn`/`supplierAbn`/`businessNumber`/`australianBusinessNumber`,
 `total`/`grandTotal`/`amount`,
 `reference`/`referenceNumber`/`invoiceNumber`/`receiptNumber`/`receiptNo`,
 `date`/`purchaseDate`/`transactionDate`/`receiptDate`,
@@ -763,12 +764,16 @@ or `mergeAnalysis` looks at the result.
 coerced to a string rather than dropped, since a value like `"0020012364141"`
 is invalid JSON as a bare number literal — leading zeros aren't allowed — so
 a model treating it as numeric would otherwise silently lose them) and
-writes back a stable shape: `{ vendor, date, dueDate, total, currency,
+writes back a stable shape: `{ vendor, abn, date, dueDate, total, currency,
 reference, notes, items: [{ description, amount, category }], reviewedBy,
 reviewedAt, ...whatever else was already there }`. `dueDate` is the payment
 due date (distinct from `date`, the purchase/transaction date) — captured so
 it can flow through to Manager's purchase invoice `Due date` field instead
-of requiring a second lookup at posting time. `confidence`/`confidenceReason` — set
+of requiring a second lookup at posting time. `abn` is the vendor's
+Australian Business Number as printed on the receipt (usually 11 digits,
+with or without spaces) — captured as a plain string (no checksum
+validation or reformatting) so it can be matched against or written into a
+supplier's ABN in Manager. `confidence`/`confidenceReason` — set
 by Cowork's own task instructions (`CLAUDE_COWORK_TASK.md`, not part of this
 repo's contract) — are read the same lenient way but are only treated as a
 "needs human review" signal when `confidence` is `"review"`
@@ -851,7 +856,7 @@ with field `receipt` (same as `/api/send`). Same 8 MB / image-MIME / no-PDF
 rules. One-shot: returns `409` if an image is already present. Success:
 `{ ok: true, id, createdAt, filename, mimeType, sizeBytes }`.
 
-`POST .../review` takes `{ vendor, date, dueDate,
+`POST .../review` takes `{ vendor, abn, date, dueDate,
 total, currency, reference, notes, items: [{ description, amount, category }] }`,
 requires at least one item, and writes it through `mergeAnalysis` (§6.2) via
 the same `saveAnalysis` store function `save_analysis` uses. It deliberately
@@ -1057,7 +1062,7 @@ processed**/**Mark unprocessed** toggle (`POST /api/receipts/:id/status`,
 §7 — local state updates immediately from the response), a **Delete** link
 (only rendered while unprocessed; `window.confirm` before calling
 `DELETE /api/receipts/:id` and redirecting to `/receipts` on success),
-vendor/date/dueDate/total/currency/reference, an editable item table (description
+vendor/abn/date/dueDate/total/currency/reference, an editable item table (description
 and amount only — category isn't a human-editable field here; matching a
 line to a Manager expense account is Cowork's job, per §6.2, not something
 this page asks the reviewer to pick), and a running items-total that flags
