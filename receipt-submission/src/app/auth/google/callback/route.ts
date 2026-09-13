@@ -47,6 +47,9 @@ export async function GET(request: NextRequest) {
   try {
     const user = await exchangeCodeForUser(code);
     if (!isAllowedEmail(user.email)) {
+      console.error(
+        `Rejected sign-in for ${JSON.stringify(user.email)}; ALLOWED_USERS=${JSON.stringify(process.env.ALLOWED_USERS)}`,
+      );
       return loginRedirect("Your account is not allowed to use this app");
     }
 
