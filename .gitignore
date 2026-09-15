@@ -38,5 +38,9 @@ CLAUDE_COWORK_TASK.md
 !/secrets/*.env.example
 /secrets/gmail/*.json
 !/secrets/gmail/gcp-oauth.keys.json.example
+# Bank-feed provider config saved by manager-mcp's /setup/bank-feeds UI
+# (BASIQ_USERNAME/PASSWORD etc.) -- see manager-mcp/README.md's
+# "Bank-feed providers" section. Never handwritten, never committed.
+/secrets/manager/
 /data/
 /backups/

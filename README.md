@@ -56,13 +56,18 @@ calling two of Manager's own *undocumented* internal action endpoints
 directly — there's no documented `/api2` endpoint for this. Those endpoints
 are part of Manager's web UI/action layer, not `/api2`, and **`MANAGER_API_KEY`
 does not authenticate them** — that key only covers `/api2`. The hourly
-bank-feed sync (`/check-for-new-transactions`)
-is the same: a UI action that wants HTTP Basic Auth, not `X-API-KEY` and
-not the old `/api/…` namespace (that one 401s before routing). Nested
-`/bank-and-cash-accounts/check-for-new-transactions` only renders the list
-page and does not import. Manager
+bank-feed sync is the same: every bank-feed provider (see
+`manager-mcp/src/manager_mcp/bank_feed_providers/`, pluggable —
+Aussie Bank Feeds/Basiq or Manager's own built-in `/check-for-new-transactions`
+control) wants HTTP Basic Auth, not `X-API-KEY` and not the old `/api/…`
+namespace (that one 401s before routing). Manager
 accepts Basic Auth using a real Manager user account as an alternative to a
-browser session cookie, so a dedicated user is needed:
+browser session cookie, so a dedicated user is needed. Once the mcp user and
+`MANAGER_MCP_TRANSPORT=http` are both set up, `/setup/bank-feeds` (gated by
+the same Google login used for remote MCP access) walks through configuring
+a provider — it reads what it can from Manager and only asks for what it
+can't (e.g. the Aussie Bank Feeds login); see `manager-mcp/README.md`'s
+"Bank-feed providers" section.
 
 1. In Manager, create a dedicated user for this — name it `mcp` (or similar)
    so it's obviously not a human. **Role: "Restricted user"**, not
@@ -161,11 +166,11 @@ Implemented here:
 - `manager-mcp`'s Streamable HTTP + Google OAuth transport (see that repo's
   `http_auth.py` and README) is wired in via `MANAGER_MCP_TRANSPORT=http`.
 - Hourly bank-feed sync: `MANAGER_MCP_BANK_FEED_SYNC_INTERVAL_SECONDS=3600`
-  in `compose.yaml` so `manager-mcp` GETs Manager's
-  `/check-for-new-transactions` UI action as the mcp user (Aussie Bank
-  Feeds / "Check for New Transactions") without a UI click. Nested
-  `/bank-and-cash-accounts/check-for-new-transactions` is the list tab, not
-  the action. Unset or `0` disables it.
+  in `compose.yaml` so `manager-mcp` runs whichever bank-feed provider is
+  configured (Aussie Bank Feeds/Basiq, or Manager's own built-in "Check for
+  New Transactions" as a no-config fallback — see
+  `manager-mcp/README.md`'s "Bank-feed providers" section) as the mcp
+  user, without a UI click. Unset or `0` disables it.
 - `gmail-relay` is wired the same way (`GMAIL_RELAY_TRANSPORT=http`), reusing
   manager-mcp's `AllowlistedGoogleProvider` pattern — MCP tools gated by a
   Google-account email allowlist, not a static bearer token — since it's

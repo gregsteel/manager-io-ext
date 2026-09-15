@@ -52,6 +52,14 @@ services:
       - "55668:8080"
     env_file:
       - ./secrets/manager-mcp.env
+    volumes:
+      # Read-write: the /setup/bank-feeds UI saves a chosen provider's
+      # config here (see manager-mcp/src/manager_mcp/bank_feed_providers/
+      # feeds_config.py) instead of into manager-mcp.env, so a Basiq
+      # username/password entered through that page never lands in an env
+      # file. Scoped to its own subdirectory of ./secrets, not the whole
+      # tree, since manager-mcp only needs to read/write this one file.
+      - ./secrets/manager:/secrets/manager
     environment:
       MANAGER_MCP_TRANSPORT: http
       MANAGER_MCP_HTTP_HOST: 0.0.0.0
@@ -63,10 +71,11 @@ services:
       # Docker DNS name/port (8080), never the host-published port (55667) —
       # nothing inside manager's own network namespace listens on 55667.
       MANAGER_API_URL: http://manager:8080/api2
-      # Hourly trigger of Manager's bank-feed import ("Check for New
-      # Transactions" / Aussie Bank Feeds). Runs inside this process, not as
+      # Hourly trigger of a bank-feed import via whichever provider is
+      # configured (see /setup/bank-feeds). Runs inside this process, not as
       # a Cowork task. Unset or 0 disables it (stdio/dev default).
       MANAGER_MCP_BANK_FEED_SYNC_INTERVAL_SECONDS: "3600"
+      MANAGER_MCP_BANK_FEED_CONFIG_PATH: /secrets/manager/feeds.config
 
   receipts:
     build:
