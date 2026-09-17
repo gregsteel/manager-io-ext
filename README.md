@@ -157,87 +157,11 @@ Once all `secrets/*.env` files and
 ## Webhook auto-deploy
 
 Pushes to `main` can trigger an automatic `git pull && ./deploy.sh` on the
-deploy server, via a `webhook` service (the
-[`lwlook/webhook`](https://hub.docker.com/r/lwlook/webhook) image, wrapping
-[`adnanh/webhook`](https://github.com/adnanh/webhook)) reached through GitHub
-CLI's `gh webhook forward` tunnel — not a public endpoint. This matches this
-project's constraint of owning no public TLS/hostname surface (see the note
-at the top of `compose.yaml`).
-
-Every request is still required to carry a valid HMAC-SHA256 signature (the
-same secret GitHub itself would sign with) as defense in depth, checked in
-`webhook/hooks.json` before anything runs.
-
-**One-time setup on the deploy server:**
-
-1. Generate a secret and fill in `webhook/hooks.json` (gitignored):
-   ```sh
-   cp webhook/hooks.json.example webhook/hooks.json
-   openssl rand -hex 32   # paste the output over REPLACE_ME_WITH_RANDOM_SECRET in webhook/hooks.json
-   chmod 600 webhook/hooks.json
-   ```
-2. Give the webhook container a read-only deploy key with pull access to
-   this repo (origin is an SSH remote):
-   ```sh
-   mkdir -p secrets/webhook-ssh
-   ssh-keygen -t ed25519 -N "" -f secrets/webhook-ssh/id_ed25519 -C "manager-io-ext-webhook-deploy"
-   ssh-keyscan github.com >> secrets/webhook-ssh/known_hosts
-   chmod 700 secrets/webhook-ssh
-   chmod 600 secrets/webhook-ssh/id_ed25519
-   ```
-   Add `secrets/webhook-ssh/id_ed25519.pub` as a **read-only** Deploy Key on
-   the GitHub repo (Settings → Deploy keys).
-3. Start the stack (`./deploy.sh` now also brings up `webhook`, bound to
-   `127.0.0.1:9000` only):
-   ```sh
-   ./deploy.sh
-   ```
-4. Install and run `gh webhook forward` on the deploy server, using the
-   *same* secret as step 1 — it authenticates to GitHub via your existing
-   `gh auth login` session and needs to keep running, so wire it up as a
-   systemd unit rather than a one-off foreground command:
-   ```sh
-   gh extension install cli/gh-webhook
-   ```
-   `/etc/systemd/system/gh-webhook-forward.service`:
-   ```ini
-   [Unit]
-   Description=Forward GitHub webhook events to local deploy webhook
-   After=network-online.target docker.service
-   Wants=network-online.target
-
-   [Service]
-   Type=simple
-   User=<deploy-user>
-   ExecStart=/usr/bin/gh webhook forward \
-       --repo gregsteel/manager-io-ext \
-       --events=push \
-       --secret=<PASTE_SAME_SECRET_AS_hooks.json> \
-       --url=http://127.0.0.1:9000/hooks/deploy-accounting
-   Restart=always
-   RestartSec=5
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-   ```sh
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now gh-webhook-forward
-   ```
-5. Verify: push a commit to `main`, then check
-   `docker compose logs -f webhook` on the deploy server for the
-   `deploy-accounting` hook firing, followed by `deploy.sh`'s own output.
-
-**Caveats:**
-
-- The `webhook` service mounts `/var/run/docker.sock` so `deploy.sh`'s
-  `docker compose` calls can control the host daemon — equivalent to root on
-  the host. Acceptable here because it's never reachable except through the
-  authenticated `gh webhook forward` tunnel plus its own HMAC check, but
-  don't also publish port 9000 beyond `127.0.0.1`.
-- `lwlook/webhook`'s base image must have `git` available for
-  `webhook/scripts/deploy-hook.sh`'s `git pull` to work — if it doesn't,
-  `docker compose logs webhook` will show that clearly after a push.
+deploy server via a `webhook` service (`lwlook/webhook`, wrapping
+`adnanh/webhook`), gated by HMAC-SHA256 signature verification. See
+[webhook/README.md](webhook/README.md) for full setup — both the no-public-
+endpoint route (`gh webhook forward`, the default for this project) and the
+direct-GitHub-webhook-through-a-reverse-proxy alternative.
 
 ## What's implemented vs. still open
 
