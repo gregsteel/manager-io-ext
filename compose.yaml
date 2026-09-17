@@ -60,6 +60,15 @@ services:
       # file. Scoped to its own subdirectory of ./secrets, not the whole
       # tree, since manager-mcp only needs to read/write this one file.
       - ./secrets/manager:/secrets/manager
+      # FastMCP's OAuthProxy (behind AllowlistedGoogleProvider) persists all
+      # OAuth state here by default — registered clients, refresh tokens,
+      # JTI mappings — as an encrypted file store, keyed by a fingerprint
+      # derived from the client secret (stable across restarts). Without
+      # this mount it lives in the container's ephemeral writable layer, so
+      # every recreate wipes it and forces callers (e.g. Cowork) through a
+      # full re-auth instead of silently reusing their existing token.
+      # Under secrets/, not data/, since the contents are OAuth tokens.
+      - ./secrets/manager-mcp-oauth:/root/.local/share/fastmcp
     environment:
       MANAGER_MCP_TRANSPORT: http
       MANAGER_MCP_HTTP_HOST: 0.0.0.0
@@ -129,6 +138,11 @@ services:
     volumes:
       - ./secrets/gmail:/secrets:ro
       - gmail-relay-tmp:/data/tmp
+      # Same reasoning as manager-mcp's oauth-proxy mount above: persists
+      # FastMCP's OAuthProxy file store (registered clients, refresh
+      # tokens) across container recreates so callers don't get forced
+      # through a full re-auth every deploy.
+      - ./secrets/gmail-relay-oauth:/root/.local/share/fastmcp
     env_file:
       - ./secrets/gmail-relay.env
     environment:

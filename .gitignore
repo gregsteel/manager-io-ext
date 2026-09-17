@@ -45,6 +45,10 @@ CLAUDE_COWORK_TASK.md
 # Read-only deploy key mounted into the webhook container (see README's
 # "Webhook auto-deploy" section).
 /secrets/webhook-ssh/
+# FastMCP's OAuthProxy encrypted token store for manager-mcp/gmail-relay
+# (registered clients, refresh tokens) -- see compose.yaml's mount comment.
+/secrets/manager-mcp-oauth/
+/secrets/gmail-relay-oauth/
 /data/
 /backups/
 
