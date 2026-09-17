@@ -42,5 +42,12 @@ CLAUDE_COWORK_TASK.md
 # (BASIQ_USERNAME/PASSWORD etc.) -- see manager-mcp/README.md's
 # "Bank-feed providers" section. Never handwritten, never committed.
 /secrets/manager/
+# Read-only deploy key mounted into the webhook container (see README's
+# "Webhook auto-deploy" section).
+/secrets/webhook-ssh/
 /data/
 /backups/
+
+# Real HMAC secret lives here, copied from hooks.json.example.
+/webhook/hooks.json
+!/webhook/hooks.json.example

@@ -64,6 +64,15 @@ check_secrets() {
         echo "   chmod 600 secrets/<name>.env"
         exit 1
     fi
+    # webhook/hooks.json holds the real HMAC secret (gitignored) — bind-
+    # mounting it while missing would make Docker create an empty directory
+    # in its place instead of failing loudly.
+    if [ ! -f "webhook/hooks.json" ]; then
+        echo "❌ Missing webhook/hooks.json"
+        echo "   cp webhook/hooks.json.example webhook/hooks.json"
+        echo "   # then replace REPLACE_ME_WITH_RANDOM_SECRET with: openssl rand -hex 32"
+        exit 1
+    fi
 }
 
 wait_for_health() {

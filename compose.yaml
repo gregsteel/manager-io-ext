@@ -139,5 +139,33 @@ services:
       RELAY_DOWNLOAD_DIR: /data/tmp
       RELAY_MAX_ATTACHMENT_BYTES: "15728640"
 
+  webhook:
+    # Auto-deploy on push to main. Not exposed publicly (127.0.0.1 only) —
+    # reached exclusively through an authenticated `gh webhook forward`
+    # tunnel run on this host (see README's "Webhook auto-deploy" section),
+    # consistent with this project owning no public TLS/hostname surface
+    # (see the top-of-file note). HMAC-SHA256 verification in hooks.json is
+    # still enforced as defense in depth.
+    image: lwlook/webhook
+    container_name: accounting-webhook
+    restart: unless-stopped
+    command: ["-verbose", "-hooks=/etc/webhook/hooks.json", "-hotreload"]
+    ports:
+      - "127.0.0.1:9000:9000"
+    volumes:
+      # Real secret lives only in webhook/hooks.json (gitignored, copied from
+      # hooks.json.example) — never committed.
+      - ./webhook/hooks.json:/etc/webhook/hooks.json:ro
+      - ./webhook/scripts:/opt/scripts:ro
+      # Whole repo, read-write, so the hook can `git pull` and then invoke
+      # ./deploy.sh from the checkout it just updated.
+      - .:/repo
+      # Deploy key with pull access to this repo (read-only). Required
+      # because origin is an SSH remote (git@github.com:...).
+      - ${WEBHOOK_SSH_DIR:-./secrets/webhook-ssh}:/root/.ssh:ro
+      # Lets deploy.sh's `docker compose` calls control the *host* daemon —
+      # see the docker.sock caveat in this service's comment above.
+      - /var/run/docker.sock:/var/run/docker.sock
+
 volumes:
   gmail-relay-tmp:
