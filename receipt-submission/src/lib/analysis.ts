@@ -10,6 +10,7 @@ export type ReceiptLineItem = {
   description: string;
   amount: number | null;
   category: string;
+  gst: number | null;
 };
 
 export type ReceiptAnalysis = {
@@ -18,7 +19,6 @@ export type ReceiptAnalysis = {
   date: string;
   dueDate: string;
   total: number | null;
-  gst: number | null;
   currency: string;
   reference: string;
   notes: string;
@@ -64,7 +64,7 @@ const ITEMS_KEYS = ["items", "lineItems", "line_items", "lines"];
 const ITEM_DESC_KEYS = ["description", "desc", "name", "item", "label"];
 const ITEM_AMOUNT_KEYS = ["amount", "cost", "price", "total", "value"];
 const ITEM_CATEGORY_KEYS = ["category", "tag", "type", "class"];
-const GST_KEYS = ["gst", "gstAmount", "tax", "taxAmount", "gstTotal", "salesTax"];
+const ITEM_GST_KEYS = ["gst", "gstAmount", "tax", "taxAmount", "gstTotal", "salesTax"];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -125,8 +125,9 @@ function parseItem(value: unknown): ReceiptLineItem | null {
   const description = firstString(value, ITEM_DESC_KEYS);
   const amount = firstNumber(value, ITEM_AMOUNT_KEYS);
   const category = firstString(value, ITEM_CATEGORY_KEYS);
+  const gst = firstNumber(value, ITEM_GST_KEYS);
   if (!description && amount === null && !category) return null;
-  return { description, amount, category };
+  return { description, amount, category, gst };
 }
 
 /** Best-effort read of whatever Cowork last saved into `analysis_json`. */
@@ -137,7 +138,6 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
     date: "",
     dueDate: "",
     total: null,
-    gst: null,
     currency: "",
     reference: "",
     notes: "",
@@ -155,7 +155,6 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
   const date = firstString(obj, DATE_KEYS);
   const dueDate = firstString(obj, DUE_DATE_KEYS);
   const total = firstNumber(obj, TOTAL_KEYS);
-  const gst = firstNumber(obj, GST_KEYS);
   const currency = firstString(obj, CURRENCY_KEYS);
   const confidence = firstString(obj, CONFIDENCE_KEYS);
   const confidenceReason = firstString(obj, CONFIDENCE_REASON_KEYS);
@@ -174,7 +173,7 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
   // Nothing to split — seed one row from the total so there's something to
   // edit instead of a blank table.
   if (items.length === 0 && total !== null) {
-    items = [{ description: vendor || "Total", amount: total, category: "" }];
+    items = [{ description: vendor || "Total", amount: total, category: "", gst: null }];
   }
 
   return {
@@ -183,7 +182,6 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
     date,
     dueDate,
     total,
-    gst,
     currency,
     reference,
     notes,
@@ -214,7 +212,6 @@ export function mergeAnalysis(
     date: edits.date,
     dueDate: edits.dueDate,
     total: edits.total,
-    gst: edits.gst,
     currency: edits.currency,
     reference: edits.reference,
     notes: edits.notes,

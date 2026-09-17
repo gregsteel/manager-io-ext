@@ -27,6 +27,7 @@ function newRow(item?: ReceiptLineItem): Row {
     description: item?.description ?? "",
     amount: item?.amount ?? null,
     category: item?.category ?? "",
+    gst: item?.gst ?? null,
   };
 }
 
@@ -42,7 +43,6 @@ export function ReceiptReview({
   const [date, setDate] = useState(analysis.date);
   const [dueDate, setDueDate] = useState(analysis.dueDate);
   const [total, setTotal] = useState(analysis.total ?? "");
-  const [gst, setGst] = useState(analysis.gst ?? "");
   const [currency, setCurrency] = useState(analysis.currency);
   const [reference, setReference] = useState(analysis.reference);
   const [notes, setNotes] = useState(analysis.notes);
@@ -141,14 +141,14 @@ export function ReceiptReview({
           date,
           dueDate,
           total: total === "" ? null : Number(total),
-          gst: gst === "" ? null : Number(gst),
           currency,
           reference,
           notes,
-          items: rows.map(({ description, amount, category }) => ({
+          items: rows.map(({ description, amount, category, gst }) => ({
             description,
             amount,
             category,
+            gst,
           })),
         }),
       });
@@ -301,19 +301,6 @@ export function ReceiptReview({
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-muted">GST</span>
-            <input
-              type="number"
-              step="0.01"
-              value={gst}
-              onChange={(e) =>
-                setGst(e.target.value === "" ? "" : Number(e.target.value))
-              }
-              className="rounded-lg border border-black/10 bg-surface px-3 py-2 text-foreground"
-              placeholder="0.00"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
             <span className="text-muted">Currency</span>
             <input
               value={currency}
@@ -369,6 +356,19 @@ export function ReceiptReview({
                   }
                   placeholder="0.00"
                   className="w-24 shrink-0 rounded-lg border border-black/10 bg-surface px-3 py-2 text-sm text-foreground"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  value={row.gst ?? ""}
+                  onChange={(e) =>
+                    updateRow(row.key, {
+                      gst: e.target.value === "" ? null : Number(e.target.value),
+                    })
+                  }
+                  placeholder="GST"
+                  title="GST included in this item's amount"
+                  className="w-20 shrink-0 rounded-lg border border-black/10 bg-surface px-3 py-2 text-sm text-foreground"
                 />
                 <button
                   type="button"

@@ -27,8 +27,9 @@ function parseItems(value: unknown): ReceiptLineItem[] {
     const description = asString(row.description);
     const amount = asNumberOrNull(row.amount);
     const category = asString(row.category);
+    const gst = asNumberOrNull(row.gst);
     if (!description && amount === null && !category) continue;
-    items.push({ description, amount, category });
+    items.push({ description, amount, category, gst });
   }
   return items;
 }
@@ -69,7 +70,6 @@ export async function POST(
     date: asString(body.date),
     dueDate: asString(body.dueDate),
     total: asNumberOrNull(body.total),
-    gst: asNumberOrNull(body.gst),
     currency: asString(body.currency),
     reference: asString(body.reference),
     notes: asString(body.notes),

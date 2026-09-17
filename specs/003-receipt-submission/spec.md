@@ -759,19 +759,21 @@ or `mergeAnalysis` looks at the result.
 `reference`/`referenceNumber`/`invoiceNumber`/`receiptNumber`/`receiptNo`,
 `date`/`purchaseDate`/`transactionDate`/`receiptDate`,
 `dueDate`/`due_date`/`paymentDueDate`/`dueBy`,
-`items`/`lineItems`/`line_items`, `gst`/`gstAmount`/`tax`/`taxAmount`/
-`gstTotal`/`salesTax`, and per-item `description`/`amount`/`category`
-aliases; a numeric-looking `reference` is coerced to a string rather than
-dropped, since a value like `"0020012364141"` is invalid JSON as a bare
-number literal — leading zeros aren't allowed — so a model treating it as
-numeric would otherwise silently lose them) and writes back a stable shape:
-`{ vendor, abn, date, dueDate, total, gst, currency, reference, notes,
-items: [{ description, amount, category }], reviewedBy, reviewedAt,
-...whatever else was already there }`. `gst` is a receipt-level amount (like
-`total`, not nested per item) — Cowork always writes it, if at all, at the
-top level, alongside `total`, never inside an individual item — and is an
-ordinary editable field, shown in its own input directly after Total (§9.3);
-unlike `confidence`/`confidenceReason` below it is not read-only. `dueDate` is the payment
+`items`/`lineItems`/`line_items`, and per-item
+`description`/`amount`/`category`/`gst` (also aliased as
+`gstAmount`/`tax`/`taxAmount`/`gstTotal`/`salesTax`) aliases; a
+numeric-looking `reference` is coerced to a string rather than dropped,
+since a value like `"0020012364141"` is invalid JSON as a bare number
+literal — leading zeros aren't allowed — so a model treating it as numeric
+would otherwise silently lose them) and writes back a stable shape:
+`{ vendor, abn, date, dueDate, total, currency, reference, notes,
+items: [{ description, amount, category, gst }], reviewedBy, reviewedAt,
+...whatever else was already there }`. `gst` is per item, not a receipt-level
+figure — whether and how much GST applies to a given line is Cowork's call
+(it can see the printed tax breakdown and knows which items are GST-free),
+so this page only displays and lets a human correct whatever `gst` Cowork
+already put on each item; it never infers or attributes GST itself.
+`dueDate` is the payment
 due date (distinct from `date`, the purchase/transaction date) — captured so
 it can flow through to Manager's purchase invoice `Due date` field instead
 of requiring a second lookup at posting time. `abn` is the vendor's
@@ -862,7 +864,7 @@ rules. One-shot: returns `409` if an image is already present. Success:
 `{ ok: true, id, createdAt, filename, mimeType, sizeBytes }`.
 
 `POST .../review` takes `{ vendor, abn, date, dueDate,
-total, gst, currency, reference, notes, items: [{ description, amount, category }] }`,
+total, currency, reference, notes, items: [{ description, amount, category, gst }] }`,
 requires at least one item, and writes it through `mergeAnalysis` (§6.2) via
 the same `saveAnalysis` store function `save_analysis` uses. It deliberately
 never calls `markProcessed` — the point of the page is to finalise the split
@@ -1070,15 +1072,18 @@ processed**/**Mark unprocessed** toggle (`POST /api/receipts/:id/status`,
 §7 — local state updates immediately from the response), a **Delete** link
 (only rendered while unprocessed; `window.confirm` before calling
 `DELETE /api/receipts/:id` and redirecting to `/receipts` on success),
-vendor/abn/date/dueDate/total/gst/currency/reference — `gst` (§6.2) is its
-own plain numeric input, directly after Total — an editable item table
-(description and amount only — category isn't a human-editable field here;
+vendor/abn/date/dueDate/total/currency/reference, an editable item table
+(description, amount, and GST — category isn't a human-editable field here;
 matching a line to a Manager expense account is Cowork's job, per §6.2, not
 something this page asks the reviewer to pick), and a running items-total
 that flags in red when it doesn't reconcile with the declared total. Each
-item's `category` still round-trips unedited through Save (it's part of
-`Row`'s state, just not rendered), so a human correcting a description or
-amount split doesn't blank out the category Cowork already assigned. Save posts to
+item's `gst` is a plain numeric input next to its amount, editable the same
+way amount is — this page only shows and lets a human correct whatever
+per-item `gst` Cowork already determined (§6.2); it does not compute or
+suggest one itself. Each item's `category` also still round-trips unedited
+through Save (it's part of `Row`'s state, just not rendered), so a human
+correcting a description or amount split doesn't blank out the category
+Cowork already assigned. Save posts to
 `POST /api/receipts/:id/review` (§7), which
 only rewrites `analysis_json` and leaves `processed_at` alone — the receipt
 stays (or becomes) unprocessed. There is no Manager API integration and Save
