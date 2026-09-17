@@ -11,7 +11,10 @@ ARG TARGETARCH
 # git + openssh-client: deploy-hook.sh's `git pull` over the SSH deploy key.
 # docker-cli + docker-cli-compose: deploy.sh's `docker compose` calls,
 # talking to the host daemon via the mounted /var/run/docker.sock.
-RUN apk add --no-cache git openssh-client ca-certificates curl docker-cli docker-cli-compose && \
+# bash: deploy.sh itself is `#!/bin/bash` (uses arrays) — Alpine only ships
+# /bin/sh (busybox) otherwise, which can't exec it (shebang interpreter
+# missing shows up as a plain "not found", exit 127).
+RUN apk add --no-cache git openssh-client ca-certificates curl bash docker-cli docker-cli-compose && \
     case "$TARGETARCH" in \
         amd64) WEBHOOK_ARCH=amd64 ;; \
         arm64) WEBHOOK_ARCH=arm64 ;; \

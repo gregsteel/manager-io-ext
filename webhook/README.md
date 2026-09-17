@@ -73,7 +73,10 @@ it's listening:
 
 ```sh
 docker compose logs webhook
-curl -i http://127.0.0.1:55670/hooks/deploy-accounting   # expect 400 (no signature) — proves it's up
+curl -i http://127.0.0.1:55670/hooks/deploy-accounting
+# expect: 200 OK, body "Hook rules were not satisfied." — adnanh/webhook
+# uses 200 for a rule mismatch, not 4xx. This response means the container
+# is up and correctly refusing to deploy without a valid signature.
 ```
 
 ## Option A — `gh webhook forward` (no public exposure)
@@ -88,8 +91,11 @@ gh auth login          # if not already authenticated on this host
 gh extension install cli/gh-webhook
 ```
 
-It needs to run continuously, so install it as a systemd unit rather than
-running it in a foreground shell:
+It needs to run continuously, so install it as a background service rather
+than running it in a foreground shell. Pick the section for the deploy
+host's actual OS.
+
+### Linux (systemd)
 
 `/etc/systemd/system/gh-webhook-forward.service`:
 
@@ -119,6 +125,66 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now gh-webhook-forward
 sudo systemctl status gh-webhook-forward   # confirm it connected
 ```
+
+### macOS (launchd)
+
+No `systemctl` here — the equivalent is `launchd`, run per-user (not
+`sudo`) so it can reuse your existing `gh auth login` session.
+
+`~/Library/LaunchAgents/com.manager-io-ext.gh-webhook-forward.plist`
+(replace `<GH_PATH>` with the output of `which gh`, and `<SECRET>` with the
+same value as `hooks.json`):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.manager-io-ext.gh-webhook-forward</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string><GH_PATH></string>
+        <string>webhook</string>
+        <string>forward</string>
+        <string>--repo</string>
+        <string>gregsteel/manager-io-ext</string>
+        <string>--events=push</string>
+        <string>--secret=<SECRET></string>
+        <string>--url=http://127.0.0.1:55670/hooks/deploy-accounting</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/gh-webhook-forward.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/gh-webhook-forward.log</string>
+</dict>
+</plist>
+```
+
+```sh
+launchctl load ~/Library/LaunchAgents/com.manager-io-ext.gh-webhook-forward.plist
+launchctl list | grep gh-webhook-forward   # confirm it's running
+tail -f /tmp/gh-webhook-forward.log        # confirm it connected
+```
+
+To stop/remove it later:
+
+```sh
+launchctl unload ~/Library/LaunchAgents/com.manager-io-ext.gh-webhook-forward.plist
+```
+
+A `LaunchAgent` (as above, in `~/Library/LaunchAgents`) only runs while
+that user is logged in — fine for a dev Mac, but if this Mac is meant to
+stay headless/always-on as the actual deploy host, use a `LaunchDaemon` in
+`/Library/LaunchDaemons` instead (loaded with `sudo launchctl load`, runs
+independent of any login session — but then it won't have your `gh auth
+login` session, so you'd need a machine-scoped token via `GH_TOKEN` in the
+plist's `EnvironmentVariables` instead).
 
 `gh webhook forward` registers/manages the webhook on the GitHub repo itself
 (you'll see it appear under Settings → Webhooks once it connects) — you
@@ -212,8 +278,11 @@ curl -i http://127.0.0.1:55670/hooks/deploy-accounting \
   -d "$BODY"
 ```
 
-A wrong secret or missing header should get rejected (HTTP 400); this exact
-request should trigger a real deploy, so only run it when you mean to.
+A wrong secret or missing header gets the same 200 "Hook rules were not
+satisfied." response as above, not a 4xx — that's how adnanh/webhook reports
+a rule mismatch. This exact request, unmodified, should trigger a real
+deploy (200 with a different body, and `docker compose logs webhook`
+showing `deploy-hook.sh` run), so only run it when you mean to.
 
 ## Troubleshooting
 
