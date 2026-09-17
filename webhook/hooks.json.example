@@ -2,7 +2,7 @@
   {
     "id": "deploy-accounting",
     "execute-command": "/opt/scripts/deploy-hook.sh",
-    "command-working-directory": "/repo",
+    "command-working-directory": "/opt/scripts",
     "response-message": "Deploy triggered\n",
     "trigger-rule": {
       "and": [

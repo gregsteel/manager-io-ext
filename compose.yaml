@@ -161,6 +161,18 @@ services:
       # deploy-hook.sh's output) don't match the business's local time —
       # same reasoning as manager-mcp's TZ setting above.
       TZ: Australia/Melbourne
+      # deploy-hook.sh cd's here before running ./deploy.sh. Must equal the
+      # repo's real absolute path on the host (see the volumes note below),
+      # not some in-container-only path — deploy.sh's `docker compose` calls
+      # go out through the mounted docker.sock to the *host* daemon, which
+      # resolves compose.yaml's relative bind-mount paths (e.g.
+      # ./data/receipts) against this cwd. If it were an in-container-only
+      # path like /repo, the host daemon would silently create/mount a
+      # bogus, empty, root-owned directory at that literal path instead of
+      # the real ./data/receipts — which is what caused the receipts
+      # container's "EACCES: mkdir /app/data/files" (it was writing into
+      # that bogus mount, not the real data dir).
+      HOST_REPO_DIR: ${PWD}
     ports:
       - "127.0.0.1:55670:9000"
     volumes:
@@ -168,9 +180,9 @@ services:
       # hooks.json.example) — never committed.
       - ./webhook/hooks.json:/etc/webhook/hooks.json:ro
       - ./webhook/scripts:/opt/scripts:ro
-      # Whole repo, read-write, so the hook can `git pull` and then invoke
-      # ./deploy.sh from the checkout it just updated.
-      - .:/repo
+      # Mirror-mounted at the same absolute path it has on the host (not
+      # /repo) — see the HOST_REPO_DIR note above for why that matters.
+      - ${PWD}:${PWD}
       # Deploy key with pull access to this repo (read-only). Required
       # because origin is an SSH remote (git@github.com:...).
       - ${WEBHOOK_SSH_DIR:-./secrets/webhook-ssh}:/root/.ssh:ro

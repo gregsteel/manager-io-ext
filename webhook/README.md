@@ -296,8 +296,21 @@ showing `deploy-hook.sh` run), so only run it when you mean to.
   `amd64`/`arm64`/`arm`/`386`. Check `docker info | grep Architecture` on the
   deploy host and extend the `case` statement if it's something else.
 - **`fatal: detected dubious ownership in repository`** — `deploy-hook.sh`
-  already runs `git config --global --add safe.directory /repo` for this;
-  if it still happens, check the bind-mounted repo's ownership on the host.
+  already runs `git config --global --add safe.directory "$HOST_REPO_DIR"`
+  for this; if it still happens, check the bind-mounted repo's ownership on
+  the host.
+- **A service's bind-mounted data dir ends up empty/root-owned after a
+  webhook deploy** (e.g. receipts erroring `EACCES: mkdir /app/data/files`
+  against a directory that looks fine when you `ls` it directly) — this
+  container mirror-mounts the repo at its real host path (`${PWD}:${PWD}`,
+  `HOST_REPO_DIR` env var) precisely so `deploy.sh`'s `docker compose` calls
+  (which go through the mounted `docker.sock` to the *host* daemon) resolve
+  relative volume paths correctly. If `HOST_REPO_DIR` is unset or wrong, the
+  host daemon silently creates a fresh directory at that literal (wrong)
+  path instead of using the real one. Check with
+  `docker inspect <container> --format '{{json .Mounts}}'` — the `Source`
+  should be the repo's actual absolute host path, not `/repo` or anything
+  else.
 - **Signature never matches** — the secret in `hooks.json` and the one given
   to `gh webhook forward --secret=` (or the GitHub webhook's Secret field)
   must be byte-for-byte identical, including no trailing newline.
