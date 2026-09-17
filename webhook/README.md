@@ -62,14 +62,20 @@ Add `../secrets/webhook-ssh/id_ed25519.pub` to the GitHub repo as a
 
 ## 3. Start the container
 
-From the repo root:
+`./deploy.sh` deliberately does **not** manage the `webhook` service —
+`deploy-hook.sh` is what invokes `./deploy.sh` on a push, so if `./deploy.sh`
+also rebuilt/recreated `webhook`, it would kill its own container mid-deploy
+(this happened during initial testing: the container got SIGTERM partway
+through running `deploy-hook.sh`, from `docker compose up -d` recreating
+every service including itself). Start and update `webhook` explicitly,
+from the repo root:
 
 ```sh
-./deploy.sh
+docker compose up -d webhook            # first start, or after a plain code/secret change
+docker compose build webhook && docker compose up -d webhook   # after editing webhook/Dockerfile
 ```
 
-This brings up the `webhook` service along with everything else. Confirm
-it's listening:
+Confirm it's listening:
 
 ```sh
 docker compose logs webhook
@@ -247,7 +253,7 @@ confirm it's reaching the container and passing signature verification.
 **3. Restart to pick up the port change:**
 
 ```sh
-./deploy.sh
+docker compose up -d webhook
 ```
 
 ### Hardening if you go with Option B

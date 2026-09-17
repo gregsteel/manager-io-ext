@@ -108,6 +108,14 @@ ensure_docker
 export BUILD_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+# Deliberately excludes `webhook`: this script is itself what the webhook
+# container's deploy-hook.sh invokes on a push, so a bare `docker compose
+# build`/`up -d` (all services) would rebuild/recreate the webhook
+# container out from under the very process running it — killing the
+# deploy mid-flight before ./deploy.sh finishes (SIGTERM, exit unfinished).
+# `webhook` is started/rebuilt independently — see webhook/README.md.
+APP_SERVICES="manager manager-mcp receipts gmail-relay"
+
 case "$ACTION" in
 status)
     docker compose ps
@@ -132,12 +140,12 @@ esac
 if [ "$ACTION" = "rebuild" ]; then
     echo "🔄 Rebuilding all images..."
     if [ "$BUILD_CACHE" = "nocache" ]; then
-        docker compose build --no-cache --pull
+        docker compose build --no-cache --pull $APP_SERVICES
     else
-        docker compose build --pull
+        docker compose build --pull $APP_SERVICES
     fi
     echo "🚀 Recreating containers..."
-    docker compose up -d --force-recreate
+    docker compose up -d --force-recreate $APP_SERVICES
 else
     # Always build (cached) rather than only when an image is missing: an
     # image existing locally doesn't mean it's current — a source or
@@ -146,9 +154,9 @@ else
     # such changes via layer-cache content hashing and is a fast no-op
     # when nothing actually changed.
     echo "🔧 Building any changed images (cached)..."
-    docker compose build
+    docker compose build $APP_SERVICES
     echo "🚀 Starting services..."
-    docker compose up -d
+    docker compose up -d $APP_SERVICES
 fi
 
 wait_for_health "manager-mcp" "http://localhost:55668/health"
@@ -176,6 +184,9 @@ echo "   Manager:     http://localhost:55667"
 echo "   Manager MCP: http://localhost:55668"
 echo "   Receipts:    http://localhost:55666"
 echo "   Gmail relay: http://localhost:55669"
+echo ""
+echo "ℹ️  webhook is not managed by this script (see webhook/README.md) —"
+echo "   bring it up once with: docker compose up -d webhook"
 echo ""
 echo "📋 Useful commands:"
 echo "   Status:              $0 status"
