@@ -146,7 +146,13 @@ services:
     # consistent with this project owning no public TLS/hostname surface
     # (see the top-of-file note). HMAC-SHA256 verification in hooks.json is
     # still enforced as defense in depth.
-    image: lwlook/webhook
+    #
+    # Built locally (see webhook/Dockerfile) rather than pulled from
+    # lwlook/webhook: that image is amd64-only and doesn't run cleanly on an
+    # arm64 deploy host. The Dockerfile fetches the matching-arch adnanh/
+    # webhook release binary directly and also bundles git + docker CLI.
+    build:
+      context: ./webhook
     container_name: accounting-webhook
     restart: unless-stopped
     command: ["-verbose", "-hooks=/etc/webhook/hooks.json", "-hotreload"]

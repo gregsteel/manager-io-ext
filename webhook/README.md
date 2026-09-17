@@ -3,10 +3,13 @@
 Push to `main` on GitHub → this container verifies the request, then runs
 `git pull && ./deploy.sh` against the checkout at the repo root.
 
-Runs [`lwlook/webhook`](https://hub.docker.com/r/lwlook/webhook), a Docker
-wrapper around [`adnanh/webhook`](https://github.com/adnanh/webhook/tree/master/docs).
-Every request must pass **all three** checks in `hooks.json` before anything
-executes:
+Runs [`adnanh/webhook`](https://github.com/adnanh/webhook/tree/master/docs),
+built locally from `webhook/Dockerfile` rather than pulled from
+[`lwlook/webhook`](https://hub.docker.com/r/lwlook/webhook) — that image is
+amd64-only, which doesn't run cleanly on an arm64 deploy host. The
+Dockerfile downloads the matching-architecture upstream release binary at
+build time and bundles `git` + the `docker` CLI alongside it. Every request
+must pass **all three** checks in `hooks.json` before anything executes:
 
 - `X-GitHub-Event: push`
 - payload `ref == refs/heads/main`
@@ -214,10 +217,9 @@ request should trigger a real deploy, so only run it when you mean to.
 
 ## Troubleshooting
 
-- **`docker compose logs webhook` shows `git: command not found`** — the
-  `lwlook/webhook` base image doesn't include git. You'll need a custom
-  image (`FROM lwlook/webhook` + install git) or run the webhook receiver
-  natively on the host instead of in Docker.
+- **build fails with `unsupported arch`** — `webhook/Dockerfile` only maps
+  `amd64`/`arm64`/`arm`/`386`. Check `docker info | grep Architecture` on the
+  deploy host and extend the `case` statement if it's something else.
 - **`fatal: detected dubious ownership in repository`** — `deploy-hook.sh`
   already runs `git config --global --add safe.directory /repo` for this;
   if it still happens, check the bind-mounted repo's ownership on the host.
