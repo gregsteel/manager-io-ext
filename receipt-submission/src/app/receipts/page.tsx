@@ -111,6 +111,7 @@ export default async function ReceiptsPage({
         <ul className="space-y-3">
           {receipts.map((receipt) => {
             const s = status(receipt);
+            const vendor = parseAnalysis(receipt.analysisJson).vendor;
             return (
               <li key={receipt.id}>
                 <Link
@@ -140,6 +141,11 @@ export default async function ReceiptsPage({
                       <p className="mt-1 truncate text-xs text-danger">{s.reason}</p>
                     ) : null}
                   </div>
+                  {vendor ? (
+                    <span className="max-w-[35%] shrink-0 truncate text-right text-sm font-medium text-foreground">
+                      {vendor}
+                    </span>
+                  ) : null}
                 </Link>
               </li>
             );

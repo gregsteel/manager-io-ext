@@ -27,8 +27,9 @@ function parseItems(value: unknown): ReceiptLineItem[] {
     const description = asString(row.description);
     const amount = asNumberOrNull(row.amount);
     const category = asString(row.category);
+    const gst = asNumberOrNull(row.gst);
     if (!description && amount === null && !category) continue;
-    items.push({ description, amount, category });
+    items.push({ description, amount, category, gst });
   }
   return items;
 }

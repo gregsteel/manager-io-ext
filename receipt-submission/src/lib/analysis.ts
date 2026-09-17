@@ -10,6 +10,7 @@ export type ReceiptLineItem = {
   description: string;
   amount: number | null;
   category: string;
+  gst: number | null;
 };
 
 export type ReceiptAnalysis = {
@@ -63,6 +64,7 @@ const ITEMS_KEYS = ["items", "lineItems", "line_items", "lines"];
 const ITEM_DESC_KEYS = ["description", "desc", "name", "item", "label"];
 const ITEM_AMOUNT_KEYS = ["amount", "cost", "price", "total", "value"];
 const ITEM_CATEGORY_KEYS = ["category", "tag", "type", "class"];
+const ITEM_GST_KEYS = ["gst", "gstAmount", "tax", "taxAmount", "gstTotal", "salesTax"];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -123,8 +125,9 @@ function parseItem(value: unknown): ReceiptLineItem | null {
   const description = firstString(value, ITEM_DESC_KEYS);
   const amount = firstNumber(value, ITEM_AMOUNT_KEYS);
   const category = firstString(value, ITEM_CATEGORY_KEYS);
+  const gst = firstNumber(value, ITEM_GST_KEYS);
   if (!description && amount === null && !category) return null;
-  return { description, amount, category };
+  return { description, amount, category, gst };
 }
 
 /** Best-effort read of whatever Cowork last saved into `analysis_json`. */
@@ -170,7 +173,7 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
   // Nothing to split — seed one row from the total so there's something to
   // edit instead of a blank table.
   if (items.length === 0 && total !== null) {
-    items = [{ description: vendor || "Total", amount: total, category: "" }];
+    items = [{ description: vendor || "Total", amount: total, category: "", gst: null }];
   }
 
   return {

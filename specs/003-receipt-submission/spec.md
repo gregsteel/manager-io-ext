@@ -760,13 +760,19 @@ or `mergeAnalysis` looks at the result.
 `date`/`purchaseDate`/`transactionDate`/`receiptDate`,
 `dueDate`/`due_date`/`paymentDueDate`/`dueBy`,
 `items`/`lineItems`/`line_items`, and per-item
-`description`/`amount`/`category` aliases; a numeric-looking `reference` is
-coerced to a string rather than dropped, since a value like `"0020012364141"`
-is invalid JSON as a bare number literal — leading zeros aren't allowed — so
-a model treating it as numeric would otherwise silently lose them) and
-writes back a stable shape: `{ vendor, abn, date, dueDate, total, currency,
-reference, notes, items: [{ description, amount, category }], reviewedBy,
-reviewedAt, ...whatever else was already there }`. `dueDate` is the payment
+`description`/`amount`/`category`/`gst` (also aliased as
+`gstAmount`/`tax`/`taxAmount`/`gstTotal`/`salesTax`) aliases; a numeric-looking
+`reference` is coerced to a string rather than dropped, since a value like
+`"0020012364141"` is invalid JSON as a bare number literal — leading zeros
+aren't allowed — so a model treating it as numeric would otherwise silently
+lose them) and writes back a stable shape: `{ vendor, abn, date, dueDate,
+total, currency, reference, notes, items: [{ description, amount, category,
+gst }], reviewedBy, reviewedAt, ...whatever else was already there }`. A
+per-item `gst` (nullable) is folded by the review page into the item's own
+`description` text as it loads (`"<description> (GST $x.xx)"`, skipped if the
+description already mentions GST) rather than shown as its own input — so the
+GST amount is visible and travels with the description into Manager without
+a new UI control. `dueDate` is the payment
 due date (distinct from `date`, the purchase/transaction date) — captured so
 it can flow through to Manager's purchase invoice `Due date` field instead
 of requiring a second lookup at posting time. `abn` is the vendor's
@@ -857,7 +863,7 @@ rules. One-shot: returns `409` if an image is already present. Success:
 `{ ok: true, id, createdAt, filename, mimeType, sizeBytes }`.
 
 `POST .../review` takes `{ vendor, abn, date, dueDate,
-total, currency, reference, notes, items: [{ description, amount, category }] }`,
+total, currency, reference, notes, items: [{ description, amount, category, gst }] }`,
 requires at least one item, and writes it through `mergeAnalysis` (§6.2) via
 the same `saveAnalysis` store function `save_analysis` uses. It deliberately
 never calls `markProcessed` — the point of the page is to finalise the split
@@ -986,10 +992,13 @@ Cowork to post), **All**, and **Processed**. Each row is a thumbnail
 status pill — *Not yet analysed*, *Analysed*, *Needs review*, or *Processed*
 — derived from `analysed_at`/`processed_at` plus `needsHumanReview` (§6.2),
 no separate status column. An unprocessed row shows `confidenceReason` under
-the pill only when `needsHumanReview` is true, truncated to one line. The
-row links to `/review/:id` (§9.3). This is a read model only; nothing here
-writes to the database. 200 is `listReceipts`'s clamp ceiling (§6.3) — there
-is no pagination past that.
+the pill only when `needsHumanReview` is true, truncated to one line. When
+`analysis_json` has been parsed, the row's right edge also shows the
+`vendor` (§6.2) — the supplier as extracted by Cowork — truncated so it
+doesn't crowd the thumbnail/filename/status column; blank when there's no
+analysis yet. The row links to `/review/:id` (§9.3). This is a read model
+only; nothing here writes to the database. 200 is `listReceipts`'s clamp
+ceiling (§6.3) — there is no pagination past that.
 
 ### 9.2 Upload — `/upload`
 
@@ -1069,7 +1078,12 @@ this page asks the reviewer to pick), and a running items-total that flags
 in red when it doesn't reconcile with the declared total. Each item's
 `category` still round-trips unedited through Save (it's part of `Row`'s
 state, just not rendered), so a human correcting a description or amount
-split doesn't blank out the category Cowork already assigned. Save posts to
+split doesn't blank out the category Cowork already assigned. `gst` is
+likewise part of `Row`'s state without its own input: when a row is loaded,
+`describeWithGst` appends `" (GST $x.xx)"` to the description text (skipped
+if the text already mentions GST, so re-opening an already-reviewed receipt
+doesn't double it up), and the raw `gst` value still round-trips through
+Save the same way `category` does. Save posts to
 `POST /api/receipts/:id/review` (§7), which
 only rewrites `analysis_json` and leaves `processed_at` alone — the receipt
 stays (or becomes) unprocessed. There is no Manager API integration and Save

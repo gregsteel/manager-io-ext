@@ -20,13 +20,25 @@ type ReceiptSummary = {
 type Row = ReceiptLineItem & { key: string };
 
 let rowSeq = 0;
+
+/** Appends the per-item GST amount to the description text so it's visible
+ * (and travels with the description into Manager) without a separate input —
+ * skipped if the description already mentions GST, e.g. on a second review. */
+function describeWithGst(description: string, gst: number | null): string {
+  if (gst === null || /gst/i.test(description)) return description;
+  const suffix = `GST $${gst.toFixed(2)}`;
+  return description ? `${description} (${suffix})` : suffix;
+}
+
 function newRow(item?: ReceiptLineItem): Row {
   rowSeq += 1;
+  const gst = item?.gst ?? null;
   return {
     key: `row-${rowSeq}`,
-    description: item?.description ?? "",
+    description: describeWithGst(item?.description ?? "", gst),
     amount: item?.amount ?? null,
     category: item?.category ?? "",
+    gst,
   };
 }
 
@@ -143,10 +155,11 @@ export function ReceiptReview({
           currency,
           reference,
           notes,
-          items: rows.map(({ description, amount, category }) => ({
+          items: rows.map(({ description, amount, category, gst }) => ({
             description,
             amount,
             category,
+            gst,
           })),
         }),
       });
