@@ -20,25 +20,13 @@ type ReceiptSummary = {
 type Row = ReceiptLineItem & { key: string };
 
 let rowSeq = 0;
-
-/** Appends the per-item GST amount to the description text so it's visible
- * (and travels with the description into Manager) without a separate input —
- * skipped if the description already mentions GST, e.g. on a second review. */
-function describeWithGst(description: string, gst: number | null): string {
-  if (gst === null || /gst/i.test(description)) return description;
-  const suffix = `GST $${gst.toFixed(2)}`;
-  return description ? `${description} (${suffix})` : suffix;
-}
-
-function newRow(item?: ReceiptLineItem, gstFallback?: number | null): Row {
+function newRow(item?: ReceiptLineItem): Row {
   rowSeq += 1;
-  const gst = item?.gst ?? gstFallback ?? null;
   return {
     key: `row-${rowSeq}`,
-    description: describeWithGst(item?.description ?? "", gst),
+    description: item?.description ?? "",
     amount: item?.amount ?? null,
     category: item?.category ?? "",
-    gst,
   };
 }
 
@@ -54,16 +42,13 @@ export function ReceiptReview({
   const [date, setDate] = useState(analysis.date);
   const [dueDate, setDueDate] = useState(analysis.dueDate);
   const [total, setTotal] = useState(analysis.total ?? "");
+  const [gst, setGst] = useState(analysis.gst ?? "");
   const [currency, setCurrency] = useState(analysis.currency);
   const [reference, setReference] = useState(analysis.reference);
   const [notes, setNotes] = useState(analysis.notes);
-  const [rows, setRows] = useState<Row[]>(() => {
-    if (analysis.items.length === 0) return [newRow()];
-    // `gst` is a receipt-level amount (§6.2), not per item — only safe to
-    // attribute to "the" item's description when there's exactly one.
-    const soloGst = analysis.items.length === 1 ? analysis.gst : null;
-    return analysis.items.map((item) => newRow(item, soloGst));
-  });
+  const [rows, setRows] = useState<Row[]>(() =>
+    analysis.items.length > 0 ? analysis.items.map(newRow) : [newRow()],
+  );
   const [status, setStatus] = useState<
     { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; message: string }
   >({ kind: "idle" });
@@ -156,14 +141,14 @@ export function ReceiptReview({
           date,
           dueDate,
           total: total === "" ? null : Number(total),
+          gst: gst === "" ? null : Number(gst),
           currency,
           reference,
           notes,
-          items: rows.map(({ description, amount, category, gst }) => ({
+          items: rows.map(({ description, amount, category }) => ({
             description,
             amount,
             category,
-            gst,
           })),
         }),
       });
@@ -310,6 +295,19 @@ export function ReceiptReview({
               value={total}
               onChange={(e) =>
                 setTotal(e.target.value === "" ? "" : Number(e.target.value))
+              }
+              className="rounded-lg border border-black/10 bg-surface px-3 py-2 text-foreground"
+              placeholder="0.00"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-muted">GST</span>
+            <input
+              type="number"
+              step="0.01"
+              value={gst}
+              onChange={(e) =>
+                setGst(e.target.value === "" ? "" : Number(e.target.value))
               }
               className="rounded-lg border border-black/10 bg-surface px-3 py-2 text-foreground"
               placeholder="0.00"

@@ -10,7 +10,6 @@ export type ReceiptLineItem = {
   description: string;
   amount: number | null;
   category: string;
-  gst: number | null;
 };
 
 export type ReceiptAnalysis = {
@@ -19,6 +18,7 @@ export type ReceiptAnalysis = {
   date: string;
   dueDate: string;
   total: number | null;
+  gst: number | null;
   currency: string;
   reference: string;
   notes: string;
@@ -28,12 +28,8 @@ export type ReceiptAnalysis = {
 /** `parseAnalysis`'s return type: the editable fields plus Cowork's own
  * read-only assessment of why a receipt needs a human look. These are never
  * edited or explicitly round-tripped — `mergeAnalysis`'s base-object spread
- * preserves them on save regardless. `gst` is likewise read-only here: Cowork
- * writes it as a single receipt-level amount (alongside `total`, not nested
- * per item), so the review page folds it into the one item's description
- * when there's exactly one, rather than exposing it as its own edited field. */
+ * preserves them on save regardless. */
 export type ParsedReceiptAnalysis = ReceiptAnalysis & {
-  gst: number | null;
   confidence: string;
   confidenceReason: string;
 };
@@ -69,9 +65,6 @@ const ITEM_DESC_KEYS = ["description", "desc", "name", "item", "label"];
 const ITEM_AMOUNT_KEYS = ["amount", "cost", "price", "total", "value"];
 const ITEM_CATEGORY_KEYS = ["category", "tag", "type", "class"];
 const GST_KEYS = ["gst", "gstAmount", "tax", "taxAmount", "gstTotal", "salesTax"];
-// Per-item aliases too, in case a future/different Cowork run ever nests it —
-// observed data always has `gst` at the top level alongside `total`, though.
-const ITEM_GST_KEYS = GST_KEYS;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -132,9 +125,8 @@ function parseItem(value: unknown): ReceiptLineItem | null {
   const description = firstString(value, ITEM_DESC_KEYS);
   const amount = firstNumber(value, ITEM_AMOUNT_KEYS);
   const category = firstString(value, ITEM_CATEGORY_KEYS);
-  const gst = firstNumber(value, ITEM_GST_KEYS);
   if (!description && amount === null && !category) return null;
-  return { description, amount, category, gst };
+  return { description, amount, category };
 }
 
 /** Best-effort read of whatever Cowork last saved into `analysis_json`. */
@@ -145,11 +137,11 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
     date: "",
     dueDate: "",
     total: null,
+    gst: null,
     currency: "",
     reference: "",
     notes: "",
     items: [],
-    gst: null,
     confidence: "",
     confidenceReason: "",
   };
@@ -182,7 +174,7 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
   // Nothing to split — seed one row from the total so there's something to
   // edit instead of a blank table.
   if (items.length === 0 && total !== null) {
-    items = [{ description: vendor || "Total", amount: total, category: "", gst: null }];
+    items = [{ description: vendor || "Total", amount: total, category: "" }];
   }
 
   return {
@@ -191,11 +183,11 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
     date,
     dueDate,
     total,
+    gst,
     currency,
     reference,
     notes,
     items,
-    gst,
     confidence,
     confidenceReason,
   };
@@ -222,6 +214,7 @@ export function mergeAnalysis(
     date: edits.date,
     dueDate: edits.dueDate,
     total: edits.total,
+    gst: edits.gst,
     currency: edits.currency,
     reference: edits.reference,
     notes: edits.notes,
