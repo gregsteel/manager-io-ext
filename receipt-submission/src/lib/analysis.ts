@@ -28,8 +28,12 @@ export type ReceiptAnalysis = {
 /** `parseAnalysis`'s return type: the editable fields plus Cowork's own
  * read-only assessment of why a receipt needs a human look. These are never
  * edited or explicitly round-tripped — `mergeAnalysis`'s base-object spread
- * preserves them on save regardless. */
+ * preserves them on save regardless. `gst` is likewise read-only here: Cowork
+ * writes it as a single receipt-level amount (alongside `total`, not nested
+ * per item), so the review page folds it into the one item's description
+ * when there's exactly one, rather than exposing it as its own edited field. */
 export type ParsedReceiptAnalysis = ReceiptAnalysis & {
+  gst: number | null;
   confidence: string;
   confidenceReason: string;
 };
@@ -64,7 +68,10 @@ const ITEMS_KEYS = ["items", "lineItems", "line_items", "lines"];
 const ITEM_DESC_KEYS = ["description", "desc", "name", "item", "label"];
 const ITEM_AMOUNT_KEYS = ["amount", "cost", "price", "total", "value"];
 const ITEM_CATEGORY_KEYS = ["category", "tag", "type", "class"];
-const ITEM_GST_KEYS = ["gst", "gstAmount", "tax", "taxAmount", "gstTotal", "salesTax"];
+const GST_KEYS = ["gst", "gstAmount", "tax", "taxAmount", "gstTotal", "salesTax"];
+// Per-item aliases too, in case a future/different Cowork run ever nests it —
+// observed data always has `gst` at the top level alongside `total`, though.
+const ITEM_GST_KEYS = GST_KEYS;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -142,6 +149,7 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
     reference: "",
     notes: "",
     items: [],
+    gst: null,
     confidence: "",
     confidenceReason: "",
   };
@@ -155,6 +163,7 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
   const date = firstString(obj, DATE_KEYS);
   const dueDate = firstString(obj, DUE_DATE_KEYS);
   const total = firstNumber(obj, TOTAL_KEYS);
+  const gst = firstNumber(obj, GST_KEYS);
   const currency = firstString(obj, CURRENCY_KEYS);
   const confidence = firstString(obj, CONFIDENCE_KEYS);
   const confidenceReason = firstString(obj, CONFIDENCE_REASON_KEYS);
@@ -186,6 +195,7 @@ export function parseAnalysis(raw: string | null): ParsedReceiptAnalysis {
     reference,
     notes,
     items,
+    gst,
     confidence,
     confidenceReason,
   };

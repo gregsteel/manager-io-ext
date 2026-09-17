@@ -30,9 +30,9 @@ function describeWithGst(description: string, gst: number | null): string {
   return description ? `${description} (${suffix})` : suffix;
 }
 
-function newRow(item?: ReceiptLineItem): Row {
+function newRow(item?: ReceiptLineItem, gstFallback?: number | null): Row {
   rowSeq += 1;
-  const gst = item?.gst ?? null;
+  const gst = item?.gst ?? gstFallback ?? null;
   return {
     key: `row-${rowSeq}`,
     description: describeWithGst(item?.description ?? "", gst),
@@ -57,9 +57,13 @@ export function ReceiptReview({
   const [currency, setCurrency] = useState(analysis.currency);
   const [reference, setReference] = useState(analysis.reference);
   const [notes, setNotes] = useState(analysis.notes);
-  const [rows, setRows] = useState<Row[]>(() =>
-    analysis.items.length > 0 ? analysis.items.map(newRow) : [newRow()],
-  );
+  const [rows, setRows] = useState<Row[]>(() => {
+    if (analysis.items.length === 0) return [newRow()];
+    // `gst` is a receipt-level amount (§6.2), not per item — only safe to
+    // attribute to "the" item's description when there's exactly one.
+    const soloGst = analysis.items.length === 1 ? analysis.gst : null;
+    return analysis.items.map((item) => newRow(item, soloGst));
+  });
   const [status, setStatus] = useState<
     { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; message: string }
   >({ kind: "idle" });
