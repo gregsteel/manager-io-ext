@@ -151,7 +151,7 @@ services:
     restart: unless-stopped
     command: ["-verbose", "-hooks=/etc/webhook/hooks.json", "-hotreload"]
     ports:
-      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:55670:9000"
     volumes:
       # Real secret lives only in webhook/hooks.json (gitignored, copied from
       # hooks.json.example) — never committed.

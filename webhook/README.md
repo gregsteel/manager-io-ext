@@ -70,12 +70,13 @@ it's listening:
 
 ```sh
 docker compose logs webhook
-curl -i http://127.0.0.1:9000/hooks/deploy-accounting   # expect 400 (no signature) — proves it's up
+curl -i http://127.0.0.1:55670/hooks/deploy-accounting   # expect 400 (no signature) — proves it's up
 ```
 
 ## Option A — `gh webhook forward` (no public exposure)
 
-`compose.yaml` binds the webhook service to `127.0.0.1:9000` only. GitHub CLI's
+`compose.yaml` binds the webhook service to `127.0.0.1:55670` (container port
+9000) only. GitHub CLI's
 `gh webhook forward` opens an authenticated tunnel from github.com to that
 local port — nothing needs to be reachable from the internet.
 
@@ -102,7 +103,7 @@ ExecStart=/usr/bin/gh webhook forward \
     --repo gregsteel/manager-io-ext \
     --events=push \
     --secret=<PASTE_SAME_SECRET_AS_hooks.json> \
-    --url=http://127.0.0.1:9000/hooks/deploy-accounting
+    --url=http://127.0.0.1:55670/hooks/deploy-accounting
 Restart=always
 RestartSec=5
 
@@ -142,7 +143,7 @@ etc. are already published in this file):
 
 ```yaml
     ports:
-      - "9000:9000"
+      - "55670:9000"
 ```
 
 Add an upstream/location on the proxy, e.g. for an nginx-style proxy
@@ -151,7 +152,7 @@ uses for this stack's other services):
 
 ```nginx
 location /hooks/ {
-    proxy_pass http://host.docker.internal:9000;
+    proxy_pass http://host.docker.internal:55670;
     proxy_set_header Host $host;
 }
 ```
@@ -201,7 +202,7 @@ SECRET=$(grep -o '"secret": *"[^"]*"' hooks.json | cut -d'"' -f4)
 BODY='{"ref":"refs/heads/main"}'
 SIG="sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)"
 
-curl -i http://127.0.0.1:9000/hooks/deploy-accounting \
+curl -i http://127.0.0.1:55670/hooks/deploy-accounting \
   -H "Content-Type: application/json" \
   -H "X-GitHub-Event: push" \
   -H "X-Hub-Signature-256: $SIG" \
