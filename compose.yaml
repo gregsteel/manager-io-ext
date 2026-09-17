@@ -80,6 +80,13 @@ services:
   receipts:
     build:
       context: ./receipt-submission
+      args:
+        # Set by deploy.sh from git before every build so the running app
+        # can show what commit/time it was actually built from (§9.1 of the
+        # receipts spec) — otherwise "it's deployed" is unverifiable from
+        # the browser alone.
+        BUILD_SHA: ${BUILD_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     container_name: accounting-receipts
     restart: unless-stopped
     ports:

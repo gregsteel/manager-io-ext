@@ -93,6 +93,12 @@ check_secrets
 ensure_colima
 ensure_docker
 
+# Picked up by compose.yaml's receipts service as build args, baked into the
+# image, and shown in that app's UI — so "deployed" is verifiable from the
+# browser instead of just assumed after this script exits 0.
+export BUILD_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
 case "$ACTION" in
 status)
     docker compose ps

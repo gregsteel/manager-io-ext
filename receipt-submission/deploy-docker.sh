@@ -22,8 +22,14 @@ ENV_FILE="${ENV_FILE:-$PWD/.env.$APP_ENV}"
 TZ_NAME="${TZ_NAME:-$(readlink /etc/localtime 2>/dev/null | sed 's|.*zoneinfo/||')}"
 TZ_NAME="${TZ_NAME:-UTC}"
 
-echo "==> Building $IMAGE"
-docker build --pull -t "$IMAGE" .
+BUILD_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+echo "==> Building $IMAGE ($BUILD_SHA)"
+docker build --pull \
+  --build-arg "BUILD_SHA=$BUILD_SHA" \
+  --build-arg "BUILD_TIME=$BUILD_TIME" \
+  -t "$IMAGE" .
 
 echo "==> Replacing container $CONTAINER"
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true

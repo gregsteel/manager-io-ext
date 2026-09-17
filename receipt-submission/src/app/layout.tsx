@@ -37,6 +37,9 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
+  const buildSha = process.env.BUILD_SHA ?? "unknown";
+  const buildTime = process.env.BUILD_TIME ?? "unknown";
+
   return (
     <html lang="en" className={`${outfit.variable} h-full antialiased`}>
       <body className="min-h-dvh bg-background font-sans text-foreground">
@@ -49,6 +52,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           {children}
         </div>
+        <p className="pointer-events-none fixed bottom-1 right-2 z-40 text-[10px] text-muted/60">
+          {buildSha} · {buildTime}
+        </p>
       </body>
     </html>
   );

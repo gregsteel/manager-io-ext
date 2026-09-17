@@ -1118,6 +1118,8 @@ hand-clearing one it missed.
 | `DATA_DIR` | No | `{cwd}/data` | DB and images |
 | `NATIVE_APP_REDIRECT` | No | `receipts://auth` | iOS OAuth return |
 | `NEXT_BUILD_CPUS` | No | unset | Caps build parallelism |
+| `BUILD_SHA` | No | `unknown` | Docker build arg (not a runtime env var), baked in via `ENV` in the runner stage; short git commit the image was built from |
+| `BUILD_TIME` | No | `unknown` | Docker build arg, baked in the same way; UTC timestamp of the build |
 
 ### 10.2 iOS build settings
 
@@ -1150,11 +1152,23 @@ Connect rejects the upload. There is no build-time server URL — see §3.5.
 `receipt-submission` container on port **55666** with `--restart unless-stopped`.
 Secrets are read from `.env.$APP_ENV` at run time and never baked in
 (`.dockerignore` excludes `.env*`); `./data` is bind-mounted to `/app/data`.
+(The accounting-stack root `./deploy.sh` and `compose.yaml`, one level up,
+are the other way this image gets built — see that repo's own docs; both
+paths pass the same `BUILD_SHA`/`BUILD_TIME` build args, below.)
 
 The image is `node:22-alpine` with Next.js standalone output, running as
 uid 1001, healthchecked against `/health` every 60 s. The build pins
 `NEXT_BUILD_CPUS=1` and a 1536 MB heap because Colima commonly defaults to 2 GB
 and the build is otherwise OOM-killed.
+
+Both deploy paths compute `BUILD_SHA` (`git rev-parse --short HEAD`) and
+`BUILD_TIME` (UTC, at build time) and pass them as Docker build args, baked
+into the runner stage as the `BUILD_SHA`/`BUILD_TIME` env vars (§10.1). The
+root layout (`src/app/layout.tsx`) renders them as a small fixed
+bottom-right stamp on every page — otherwise there's no way, short of
+diffing the image, to tell from the browser whether a deploy actually
+shipped the commit you think it did, versus a stale cached image or a
+`docker compose up` that didn't rebuild.
 
 CI is `.github/workflows/ios.yml` only: an unsigned simulator build of the iOS
 app on `macos-15`, triggered on changes under `ios/**`. There is no web CI.

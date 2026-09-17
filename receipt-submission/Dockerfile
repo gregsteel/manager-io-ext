@@ -23,6 +23,15 @@ ENV PORT=55666
 ENV HOSTNAME=0.0.0.0
 ENV DATA_DIR=/app/data
 
+# Baked in at build time (compose.yaml passes these as build args, sourced
+# from git by deploy.sh) so the running app can show what it actually is —
+# not just "the app is up", which says nothing about whether a deploy
+# actually shipped the latest source.
+ARG BUILD_SHA=unknown
+ARG BUILD_TIME=unknown
+ENV BUILD_SHA=$BUILD_SHA
+ENV BUILD_TIME=$BUILD_TIME
+
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs \
   && mkdir -p /app/data/files \
