@@ -14,7 +14,9 @@ ARG TARGETARCH
 # bash: deploy.sh itself is `#!/bin/bash` (uses arrays) — Alpine only ships
 # /bin/sh (busybox) otherwise, which can't exec it (shebang interpreter
 # missing shows up as a plain "not found", exit 127).
-RUN apk add --no-cache git openssh-client ca-certificates curl bash docker-cli docker-cli-compose && \
+# tzdata: Alpine has no timezone database built in, so a TZ env var (set in
+# compose.yaml) is otherwise silently ignored and logs stay in UTC.
+RUN apk add --no-cache git openssh-client ca-certificates curl bash tzdata docker-cli docker-cli-compose && \
     case "$TARGETARCH" in \
         amd64) WEBHOOK_ARCH=amd64 ;; \
         arm64) WEBHOOK_ARCH=arm64 ;; \

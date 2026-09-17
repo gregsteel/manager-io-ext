@@ -156,6 +156,11 @@ services:
     container_name: accounting-webhook
     restart: unless-stopped
     command: ["-verbose", "-hooks=/etc/webhook/hooks.json", "-hotreload"]
+    environment:
+      # Container defaults to UTC otherwise, so its logs (including
+      # deploy-hook.sh's output) don't match the business's local time —
+      # same reasoning as manager-mcp's TZ setting above.
+      TZ: Australia/Melbourne
     ports:
       - "127.0.0.1:55670:9000"
     volumes:

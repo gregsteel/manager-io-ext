@@ -159,8 +159,22 @@ else
     docker compose up -d $APP_SERVICES
 fi
 
-wait_for_health "manager-mcp" "http://localhost:55668/health"
-wait_for_health "receipts" "http://localhost:55666/health"
+# When this script runs inside the webhook container (triggered by a push —
+# see webhook/scripts/deploy-hook.sh), `localhost` is the webhook
+# container's own loopback, not the host — the host-published ports below
+# aren't reachable that way. It shares a Docker network with the other
+# services in this compose project, though, so it reaches them by internal
+# service name/port instead. /.dockerenv is the standard marker for
+# "running inside a container".
+if [ -f /.dockerenv ]; then
+    MANAGER_MCP_HEALTH_URL="http://manager-mcp:8080/health"
+    RECEIPTS_HEALTH_URL="http://receipts:55666/health"
+else
+    MANAGER_MCP_HEALTH_URL="http://localhost:55668/health"
+    RECEIPTS_HEALTH_URL="http://localhost:55666/health"
+fi
+wait_for_health "manager-mcp" "$MANAGER_MCP_HEALTH_URL"
+wait_for_health "receipts" "$RECEIPTS_HEALTH_URL"
 # gmail-relay has no documented health endpoint (see README) — just confirm the
 # container is up.
 if docker compose ps --status running gmail-relay 2>/dev/null | grep -q gmail-relay; then
