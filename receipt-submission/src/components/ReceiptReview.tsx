@@ -334,7 +334,14 @@ export function ReceiptReview({
             </button>
           </div>
 
-          <div className="mt-2 space-y-2">
+          <div className="mt-2 flex items-center gap-2 px-3 text-xs text-muted">
+            <span className="min-w-0 flex-1" />
+            <span className="w-24 shrink-0 text-right">Total</span>
+            <span className="w-20 shrink-0 text-right">Tax (inc)</span>
+            <span className="w-4 shrink-0" />
+          </div>
+
+          <div className="mt-1 space-y-2">
             {rows.map((row) => (
               <div key={row.key} className="flex items-center gap-2">
                 <input
@@ -366,8 +373,7 @@ export function ReceiptReview({
                       gst: e.target.value === "" ? null : Number(e.target.value),
                     })
                   }
-                  placeholder="GST"
-                  title="GST included in this item's amount"
+                  placeholder="0.00"
                   className="w-20 shrink-0 rounded-lg border border-black/10 bg-surface px-3 py-2 text-sm text-foreground"
                 />
                 <button
