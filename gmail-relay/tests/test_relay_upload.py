@@ -28,3 +28,17 @@ def test_prepare_image_rejects_oversize(tmp_path):
             jail=jail,
             max_bytes=4,
         )
+
+
+def test_pdf_to_jpeg_stitches_all_pages(tmp_path):
+    from PIL import Image
+
+    from gmail_relay import pdf
+
+    imgs = [Image.new("RGB", (100, 200), c) for c in ("red", "blue", "green")]
+    pdf_path = tmp_path / "in.pdf"
+    imgs[0].save(pdf_path, "PDF", save_all=True, append_images=imgs[1:], resolution=72)
+    out = pdf.pdf_to_jpeg(pdf_path, tmp_path / "out", dpi=72)
+    with Image.open(out) as im:
+        assert im.width >= 100
+        assert im.height >= 3 * 200 - 6

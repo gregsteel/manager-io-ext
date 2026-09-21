@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
-import { renderPdfFirstPageToJpeg } from "@/lib/pdf-to-image";
+import { renderPdfToJpeg } from "@/lib/pdf-to-image";
 import { saveReceipt } from "@/lib/receipts-store";
 
 export const runtime = "nodejs";
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     let mimeType = file.type || "image/jpeg";
     if (isPdf) {
       try {
-        const converted = await renderPdfFirstPageToJpeg(rawBytes);
+        const converted = await renderPdfToJpeg(rawBytes);
         bytes = converted.bytes;
         mimeType = converted.mimeType;
       } catch (err) {

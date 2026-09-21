@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import httpx
 
 from gmail_relay.download_dir import JailedTempFile
-from gmail_relay.pdf import PdfConversionError, pdf_first_page_to_jpeg
+from gmail_relay.pdf import PdfConversionError, pdf_to_jpeg
 from gmail_relay.receipts_client import ReceiptsUploadError, upload_to_receipts
 
 
@@ -30,7 +30,7 @@ def prepare_receipt_image(
     jail: JailedTempFile,
     max_bytes: int,
 ) -> tuple[bytes, str, bool]:
-    """Size-check, optionally convert a PDF's first page, return image bytes.
+    """Size-check, optionally convert a PDF (all pages), return image bytes.
 
     Returns `(content, content_type, converted_from_pdf)`.
     """
@@ -47,7 +47,7 @@ def prepare_receipt_image(
 
     if is_pdf:
         try:
-            jpeg_path = pdf_first_page_to_jpeg(source_path, jail.named(""))
+            jpeg_path = pdf_to_jpeg(source_path, jail.named(""))
         except PdfConversionError as exc:
             raise RelayUploadError(f"PDF conversion failed: {exc}") from exc
         return jpeg_path.read_bytes(), "image/jpeg", True

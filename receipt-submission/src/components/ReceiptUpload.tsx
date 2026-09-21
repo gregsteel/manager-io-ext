@@ -116,7 +116,7 @@ export function ReceiptUpload() {
         </h1>
         <p className="mt-1 text-sm text-muted">
           Drop image or PDF files here, or choose them from your computer.
-          A PDF&apos;s first page is converted to an image automatically.
+          All pages of a PDF are combined into one image automatically.
         </p>
       </header>
 
