@@ -20,7 +20,7 @@ if [ -z "${RECEIPTS_BUNDLE_ID:-}" ]; then
   exit 1
 fi
 
-project_file="$CI_PRIMARY_REPOSITORY_PATH/ios/Receipts.xcodeproj/project.pbxproj"
+project_file="$CI_PRIMARY_REPOSITORY_PATH/receipt-submission/ios/Receipts.xcodeproj/project.pbxproj"
 
 sed -i '' \
   "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]*;/PRODUCT_BUNDLE_IDENTIFIER = ${RECEIPTS_BUNDLE_ID};/g" \
@@ -33,7 +33,7 @@ sed -i '' \
 # RECEIPTS_DEFAULT_SERVER_URL, value https://your-server.example, on the same
 # Xcode Cloud workflow as RECEIPTS_BUNDLE_ID.
 if [ -n "${RECEIPTS_DEFAULT_SERVER_URL:-}" ]; then
-  info_plist="$CI_PRIMARY_REPOSITORY_PATH/ios/Receipts/Info.plist"
+  info_plist="$CI_PRIMARY_REPOSITORY_PATH/receipt-submission/ios/Receipts/Info.plist"
   /usr/libexec/PlistBuddy -c "Add :RECEIPTS_DEFAULT_SERVER_URL string ${RECEIPTS_DEFAULT_SERVER_URL}" "$info_plist" \
     || /usr/libexec/PlistBuddy -c "Set :RECEIPTS_DEFAULT_SERVER_URL ${RECEIPTS_DEFAULT_SERVER_URL}" "$info_plist"
 fi
