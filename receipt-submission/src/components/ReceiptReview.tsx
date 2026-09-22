@@ -56,6 +56,7 @@ export function ReceiptReview({
   const [processedAt, setProcessedAt] = useState(receipt.processedAt);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const router = useRouter();
 
   const itemsTotal = useMemo(
@@ -105,11 +106,8 @@ export function ReceiptReview({
   }
 
   async function handleDelete() {
-    if (
-      !window.confirm(
-        "Delete this receipt permanently? This removes the image and analysis and can't be undone.",
-      )
-    ) {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
       return;
     }
     setDeleting(true);
@@ -224,14 +222,29 @@ export function ReceiptReview({
             Download image
           </a>
           {!processedAt ? (
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="ml-auto text-sm text-danger underline-offset-2 hover:underline disabled:opacity-60"
-            >
-              {deleting ? "Deleting…" : "Delete"}
-            </button>
+            <span className="ml-auto flex items-center gap-2">
+              {confirmingDelete && !deleting ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                  className="text-sm text-muted underline-offset-2 hover:underline"
+                >
+                  Cancel
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="text-sm font-medium text-danger underline-offset-2 hover:underline disabled:opacity-60"
+              >
+                {deleting
+                  ? "Deleting…"
+                  : confirmingDelete
+                    ? "Confirm delete?"
+                    : "Delete"}
+              </button>
+            </span>
           ) : null}
         </div>
       </header>

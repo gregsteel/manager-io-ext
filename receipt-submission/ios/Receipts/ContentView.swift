@@ -299,57 +299,35 @@ struct ContentView: View {
   private func save() async {
     guard let token = session.token else { return }
     let batch = pages
+    guard let combined = ReceiptImage.combine(pages: batch.map(\.image)) else {
+      session.status = "Could not combine those pages."
+      return
+    }
+    let capturedAt = batch.first?.capturedAt ?? Date()
+
     session.isUploading = true
     defer { session.isUploading = false }
 
-    var saved = 0
-    var held = 0
-    var stuckReason = "Couldn't reach the server"
-    var failures: [String] = []
-
-    for page in batch {
-      switch await queue.submit(image: page.image, capturedAt: page.capturedAt, token: token) {
-      case .saved:
-        saved += 1
-      case .held(let reason):
-        held += 1
-        stuckReason = reason
-      case .failed(let reason):
-        failures.append(reason)
+    let text: String
+    var succeeded = true
+    switch await queue.submit(image: combined, capturedAt: capturedAt, token: token) {
+    case .saved:
+      text = "Saved."
+    case .held(let reason):
+      text = "\(reason). 1 receipt couldn't be submitted and will be retried."
+      if reason == "Sign-in expired" {
+        session.expireSession(message: text)
+        return
       }
+    case .failed(let reason):
+      text = reason
+      succeeded = false
     }
 
-    if failures.isEmpty {
+    if succeeded {
       pages = []
       selectedPage = 0
     }
-    let text = statusText(saved: saved, held: held, stuckReason: stuckReason, failures: failures)
-    if held > 0, stuckReason == "Sign-in expired" {
-      // The stored token is no longer valid — clear it now rather than
-      // leaving the app looking signed in until the user notices and taps
-      // Sign Out themselves.
-      session.expireSession(message: text)
-    } else {
-      session.status = text
-    }
-  }
-
-  private func statusText(saved: Int, held: Int, stuckReason: String, failures: [String]) -> String {
-    var lines: [String] = []
-
-    if saved > 0 {
-      lines.append(saved == 1 ? "Saved." : "Saved \(saved) pages.")
-    }
-
-    if held > 0 {
-      let count = held == 1 ? "1 receipt" : "\(held) receipts"
-      lines.append("\(stuckReason). \(count) couldn't be submitted and will be retried.")
-    }
-
-    if let first = failures.first {
-      lines.append(first)
-    }
-
-    return lines.joined(separator: "\n")
+    session.status = text
   }
 }

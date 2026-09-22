@@ -23,6 +23,40 @@ enum ReceiptImage {
     encode(scaledForUpload(image))
   }
 
+  /// Stacks captured pages vertically into one image, so a multi-page receipt
+  /// becomes a single upload — mirroring how multi-page PDFs are combined
+  /// into one JPEG server-side rather than one row per page.
+  static func combine(pages: [UIImage]) -> UIImage? {
+    guard let first = pages.first else { return nil }
+    guard pages.count > 1 else { return first }
+
+    let width = pages.map { $0.size.width * $0.scale }.max() ?? 0
+    guard width > 0 else { return nil }
+    let heights = pages.map { page -> CGFloat in
+      let pageWidth = page.size.width * page.scale
+      let pageHeight = page.size.height * page.scale
+      return pageWidth > 0 ? pageHeight * (width / pageWidth) : pageHeight
+    }
+    let totalHeight = heights.reduce(0, +)
+    guard totalHeight > 0 else { return nil }
+
+    let format = UIGraphicsImageRendererFormat()
+    format.opaque = true
+    format.scale = 1
+    format.preferredRange = .standard
+    let size = CGSize(width: width, height: totalHeight)
+    return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+      UIColor.white.setFill()
+      UIRectFill(CGRect(origin: .zero, size: size))
+      var y: CGFloat = 0
+      for (index, page) in pages.enumerated() {
+        let height = heights[index]
+        page.draw(in: CGRect(x: 0, y: y, width: width, height: height))
+        y += height
+      }
+    }
+  }
+
   /// Re-encodes an already-held JPEG that was saved before downscaling existed.
   static func jpegData(from data: Data) -> Data? {
     guard let image = UIImage(data: data) else { return nil }
