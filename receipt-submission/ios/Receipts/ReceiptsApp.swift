@@ -61,7 +61,8 @@ struct ReceiptsApp: App {
       }
     }
     .backgroundTask(.appRefresh(retryTaskIdentifier)) {
-      handleRetryResult(await ReceiptQueue.shared.retryHeld())
+      let result = await ReceiptQueue.shared.retryHeld()
+      await handleRetryResult(result)
       scheduleBackgroundRetry()
     }
   }
