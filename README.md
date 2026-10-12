@@ -7,6 +7,7 @@ Three scheduled Claude Cowork tasks drive the accounting stack:
 - `manager-mcp` is an MCP server that wraps Manager.io and performs supporting functions such as polling for bank transactions.  It is forked from [flumpiey/manager-mcp](https://github.com/flumpiey/manager-mcp)
 - `gmail-relay` is an MCP server that connects with GMail and supports attachments (which the OOB connectors for some LLM harnesses don't)
 - `receipts-submission` provides a simple app for capturing receipts via mobile, wrapped with an MCP server that allows an LLM to analyse it
+- `email-worker` is a Cloudflare Email Worker that delivers forwarded receipt emails to `receipts-submission` (one receipt per attachment) — a credential-free alternative to `gmail-relay`'s OAuth polling; see `email-worker/README.md`
 
 This project does not own TLS, public hostnames, or nginx. This stack publishes plain HTTP ports on the host reachable via `host.docker.internal`.
 

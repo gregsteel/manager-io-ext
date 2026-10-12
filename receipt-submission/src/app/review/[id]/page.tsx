@@ -29,6 +29,7 @@ export default async function ReviewPage({
         createdAt: receipt.createdAt,
         filename: receipt.filename,
         processedAt: receipt.processedAt,
+        ignoredReason: receipt.ignoredReason,
         hasAnalysis: receipt.analysisJson !== null,
       }}
       analysis={analysis}

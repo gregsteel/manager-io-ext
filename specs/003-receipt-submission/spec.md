@@ -155,7 +155,37 @@ refusal; call `/mcp` with a session JWT and confirm it is rejected.
 3. **Given** a session JWT, **When** it is presented to `/mcp`, **Then** it is rejected; MCP access tokens are likewise not accepted as app sessions.
 4. **Given** an unauthenticated request, **When** it targets `GET /api/receipts/:id/image`, **Then** it succeeds only with a receipt-scoped `image-access` token, and the request gate defers rather than blanket-rejecting it.
 
+---
+
+### User Story 7 - Receive receipts by email, several at a time (Priority: P2)
+
+Invoices and receipts arrive in the inbox with a PDF — often alongside logos,
+terms-and-conditions, or a second unrelated attachment. A Gmail filter forwards
+them to a private address; each attachment becomes its own receipt without the
+user touching anything, and Cowork works out which ones are actually receipts.
+
+**Why this priority**: Replaces polling Gmail through OAuth (whose refresh token
+kept expiring) with a push that holds no Google credential. Depends on Story 3.
+
+**Independent Test**: POST a raw email with a PDF, a small inline logo and a
+`.docx` to `/api/inbound/email` with the shared bearer; confirm one receipt row
+exists for the PDF, the other two are reported as skipped, and a second POST of
+the same email stores nothing.
+
+**Acceptance Scenarios**:
+
+1. **Given** an email whose forwarding account (`X-Forwarded-For`) or `From` is in `ALLOWED_USERS`, **When** it is POSTed with the correct bearer, **Then** every PDF/image attachment becomes its own receipt (PDFs converted to JPEG), tagged with the email's subject, sender, a snippet of its body, its original filename and position.
+2. **Given** an email from an address not in `ALLOWED_USERS`, **When** it is POSTed, **Then** the response is `403` and nothing is stored.
+3. **Given** the same email delivered twice, **When** it is POSTed again, **Then** nothing new is stored (idempotent per `Message-ID` + attachment position).
+4. **Given** an email with a receipt PDF and a logo, **When** Cowork calls `get_receipt` on either, **Then** the response includes the email body snippet and `siblings`, so it can judge which is the receipt.
+5. **Given** an item Cowork decides is not a receipt, **When** it calls `mark_not_receipt` with a reason, **Then** the item is marked processed with that reason — dropping out of `unprocessed=true` queues — and a person can reopen it with "Mark unprocessed".
+6. **Given** `INBOUND_EMAIL_SECRET` is unset, **When** anything POSTs to the route, **Then** it returns `503` rather than accepting.
+
 ### Edge Cases
+
+- **Email with no stored attachments**: a receipt that exists only in the email body stores nothing (reported, not an error). Rendering the body is not implemented.
+- **Unsupported or oversized attachment**: Word docs, calendar invites, zips, empty files, and anything over 8 MB are skipped and reported in the response and server log; the rest of the email is still ingested. Small *inline* images (under 20 KB — signature logos, icons) are skipped; small *attached* images are kept, because only Cowork can tell a photographed receipt from a logo.
+- **Gmail forwarding confirmation**: the code Gmail mails to a new forwarding address is recognised and written to the server log, not stored.
 
 - **Held receipt uploaded days later**: the phone sends `capturedAt` as local wall-clock time with an explicit offset, so the stored filename reflects when the receipt was *taken*, not when it arrived. `created_at` and `filename` legitimately disagree.
 - **Permanently rejected receipt**: retries are unbounded and never give up. A `400` for a non-image retries forever at one request per minute — cheap, and strictly preferable to discarding an image.
@@ -209,11 +239,19 @@ refusal; call `/mcp` with a session JWT and confirm it is rejected.
 **MCP**
 
 - **FR-022**: `/mcp` MUST speak JSON-RPC 2.0 over plain HTTP POST, remaining stateless, handling `initialize`, `tools/list`, `tools/call` and `ping`.
-- **FR-023**: The server MUST expose exactly six tools: `list_receipts`, `get_receipt`, `create_receipt`, `save_receipt`, `save_analysis`, `mark_processed`.
+- **FR-023**: The server MUST expose exactly seven tools: `list_receipts`, `get_receipt`, `create_receipt`, `save_receipt`, `save_analysis`, `mark_not_receipt`, `mark_processed`.
 - **FR-024**: `get_receipt` MUST return both a base64 image block and a signed, unauthenticated, 10-minute `imageUrl`, because Cowork can view an image block but cannot read its base64 back out to hand to another MCP server.
 - **FR-025**: `save_receipt`'s URL fetch MUST be SSRF-guarded.
 - **FR-026**: MCP tools MUST reject `application/pdf` outright.
 - **FR-027**: Upload tokens and access tokens MUST NOT be interchangeable, and neither MUST be accepted as an app session.
+- **FR-033**: `get_receipt` for an email-sourced receipt MUST include the email body snippet and its sibling attachments, and `mark_not_receipt` MUST record a reason, mark the row processed, and delete nothing.
+
+**Inbound email**
+
+- **FR-034**: `POST /api/inbound/email` MUST require the `INBOUND_EMAIL_SECRET` bearer (constant-time compare) and MUST return `503` when that secret is unset.
+- **FR-035**: Inbound email MUST be accepted only when the forwarding account (`X-Forwarded-For`, first header) or the `From` address is in `ALLOWED_USERS`; otherwise `403`, nothing stored.
+- **FR-036**: Each PDF or image attachment MUST become its own receipt row (PDFs converted as in FR-017), and ingestion MUST be idempotent per `Message-ID` and attachment position.
+- **FR-037**: Deterministic per-attachment problems MUST be reported and skipped without failing the email; unexpected errors MUST return `5xx` so the sender retries.
 
 **Authorisation**
 
@@ -225,10 +263,11 @@ refusal; call `/mcp` with a session JWT and confirm it is rejected.
 
 ### Key Entities
 
-- **Receipt**: one row plus one JPEG. Carries id, upload time, submitter, capture-derived filename, MIME type, size, and optional analysis and processed timestamps.
+- **Receipt**: one row plus one JPEG. Carries id, upload time, submitter, capture-derived filename, MIME type, size, and optional analysis and processed timestamps. A row that arrived by email also carries its provenance (`Message-ID`, subject, sender, body snippet, original filename, attachment position), and one Cowork dismissed carries an `ignored_reason`.
 - **Captured page**: an on-device image with the capture instant stamped at shutter time. Survives review, retake, and arbitrary offline delay.
 - **Held receipt**: a JPEG plus `{id, capturedAt, attempts, lastError}` on the phone, awaiting a server that will accept it.
 - **Analysis**: opaque JSON from Cowork, read leniently and written back in a stable shape. `confidence`/`confidenceReason` are read-only signals set by Cowork's own task configuration, not part of this repo's contract.
+- **Inbound email**: a raw RFC 822 message POSTed by the Cloudflare Email Worker (`email-worker/`) — one email, any number of receipt rows.
 - **Session JWT**: a 400-day self-contained human credential, revocable only by allowlist removal.
 - **MCP access token**: a 60-minute agent credential, audience-scoped to the MCP resource URL.
 - **Image tokens**: two disjoint receipt-scoped grants — `image-access` (10 min, read) and `image-upload` (30 min, write-once).
@@ -415,6 +454,7 @@ SQLite file as receipts (`oauth_clients`, `oauth_auth_codes`,
 
 `src/proxy.ts` (Next.js 16 replaces `middleware.ts` with `proxy.ts`) runs ahead
 of all routes. Paths under `/login`, `/auth/`, `/health`, `/api/health`,
+`/api/inbound/` (authenticated by its own shared-secret bearer, §7),
 `/mcp`, `/oauth/`, `/.well-known/`, `/manifest.webmanifest`, `/icon` and
 `/apple-icon` pass through — for the MCP prefix this only defers the decision;
 `/mcp` itself still requires a valid MCP access token. `/api/receipts/:id/image`
@@ -442,6 +482,7 @@ judge, other `/api/*` paths get `401`, and page routes redirect to `/login`.
 | `POST /api/send` | Session JWT (cookie or Bearer) |
 | `GET /api/receipts/:id/image` | Session JWT, or a receipt-scoped image-access token (`?token=`) |
 | `PUT`/`POST /api/receipts/:id/image` | Session JWT, or a receipt-scoped image-upload token (`Authorization: Bearer` or `?token=`) |
+| `POST /api/inbound/email` | `INBOUND_EMAIL_SECRET` bearer, then the mail's sender must be in `ALLOWED_USERS` |
 | `POST /mcp` | MCP OAuth access token |
 | `GET /.well-known/oauth-*`, `POST /oauth/register`, `POST /oauth/token` | None |
 | `GET /oauth/authorize`, `POST /oauth/approve` | Google session (consent) |
@@ -733,6 +774,17 @@ Single table `receipts`, with an index on `created_at`:
 | `analysis_json` | TEXT | yes | Opaque JSON from Cowork |
 | `analysed_at` | TEXT | yes | ISO-8601, set when analysis is saved |
 | `processed_at` | TEXT | yes | ISO-8601, set when Cowork marks the receipt processed downstream |
+| `ignored_reason` | TEXT | yes | Set by `mark_not_receipt` (which also sets `processed_at`); cleared when a person marks the row unprocessed |
+| `source` | TEXT | yes | `email` for rows from `/api/inbound/email`, otherwise null |
+| `email_message_id` | TEXT | yes | The email's `Message-ID` (or a `sha256:` of the raw message if it had none) |
+| `email_subject` | TEXT | yes | |
+| `email_from` | TEXT | yes | The email's `From` — the original sender, not the forwarding account (that is `submitted_by`) |
+| `email_snippet` | TEXT | yes | First 600 characters of the body, whitespace-collapsed — context for judging an attachment |
+| `original_filename` | TEXT | yes | The attachment's own name (`filename` is the sanitised `.jpg` display name) |
+| `attachment_index` | INTEGER | yes | Position among the email's attachments |
+
+A partial unique index on (`email_message_id`, `attachment_index`) where
+`email_message_id IS NOT NULL` backs the idempotency in FR-036.
 
 `created_at` and `filename` can disagree for a receipt that was held offline:
 the row records when it arrived, the filename when it was taken. Capture time is
@@ -796,9 +848,9 @@ for `attach_receipt_to_purchase_invoice` in the `manager-mcp` fork than
 `Description` (more likely to be unique). Keys the page doesn't recognise
 are preserved untouched on save.
 
-`processed_at` was added after the table already existed in production, so
-`openDb()` checks `PRAGMA table_info(receipts)` and runs `ALTER TABLE ...
-ADD COLUMN` on first connect if it's missing, rather than relying on
+`processed_at` and the columns after it were added after the table already
+existed in production, so `openDb()` checks `PRAGMA table_info(receipts)` and
+runs `ALTER TABLE ... ADD COLUMN` on first connect for any that are missing, rather than relying on
 `CREATE TABLE IF NOT EXISTS` (which doesn't alter existing tables).
 
 MCP OAuth adds three tables in the same database: `oauth_clients` (DCR
@@ -808,8 +860,12 @@ registrations), `oauth_auth_codes` (one-time code ids), and
 ### 6.3 Store operations
 
 `src/lib/receipts-store.ts` exports `saveReceipt`, `listReceipts`, `getReceipt`,
-`readReceiptImage`, `saveAnalysis`, `markProcessed`, `setProcessed` and
-`deleteReceipt`. `markProcessed` is `setProcessed(id, true)`;
+`readReceiptImage`, `saveAnalysis`, `markProcessed`, `markNotReceipt`,
+`setProcessed`, `findEmailReceipt`, `listEmailSiblings` and `deleteReceipt`.
+`markNotReceipt(id, reason)` sets `processed_at` and `ignored_reason` together,
+so every existing "unprocessed" filter and the Delete guard treat a dismissed
+item as done; `setProcessed(id, false)` also clears `ignored_reason`, which is
+how a person reopens one. `markProcessed` is `setProcessed(id, true)`;
 `setProcessed(id, false)` clears `processed_at` back to `NULL` and exists
 only for the review UI's manual override (§9.3) — the MCP surface still only
 ever sets it, never clears it. `deleteReceipt` removes the row and unlinks
@@ -880,6 +936,27 @@ review page, which only shows its Delete button on unprocessed receipts; mark
 one unprocessed first (via the status toggle) if it genuinely needs deleting
 after Cowork has already touched it.
 
+### `POST /api/inbound/email`
+
+`Authorization: Bearer <INBOUND_EMAIL_SECRET>`; body is the raw RFC 822 message
+(`Content-Type: message/rfc822`), up to 30 MB (`proxyClientMaxBodySize` is raised
+in `next.config.ts` because `proxy.ts` otherwise truncates bodies past 10 MB).
+Called by the Cloudflare Email Worker (`email-worker/`), which Gmail forwards to
+via Cloudflare Email Routing. `503` if the secret is unset, `401` on a wrong
+bearer, `413` if too large, `403` if neither `X-Forwarded-For`'s first address
+nor `From` is in `ALLOWED_USERS` (the matching address becomes `submitted_by`).
+
+Parsing is `postal-mime` (`src/lib/inbound-email.ts`). Each attachment is
+classified: `application/pdf` (or a `.pdf` name on `octet-stream`) is converted
+to a JPEG as in `/api/send`; `image/jpeg|png|webp|heic|heif` is stored as-is;
+anything else is skipped. Also skipped: empty, over 8 MB, and *inline* images
+under 20 KB. Everything else is stored and left for Cowork to judge. Returns
+`{ ok, stored: [{id, filename}], duplicates, skipped: [{filename, reason}] }`.
+Per-attachment failures never fail the email; unexpected errors return `500` so
+the Worker fails the delivery (re-delivery is safe, FR-036). A Gmail
+forwarding-confirmation message (`forwarding-noreply@google.com`) stores nothing
+and writes its code to the log (`{ ok, confirmation: true }`).
+
 ### `GET /api/health`, `GET /health`
 
 Unauthenticated. `{ ok: true }` and plain-text `ok` respectively; the latter is
@@ -903,10 +980,13 @@ treated as batches, notifications return `202`, and unknown methods return
 `-32601`. `GET` returns `405`. Unauthenticated calls return `401` with a
 `WWW-Authenticate` resource-metadata pointer so Claude can start OAuth.
 
-Six tools:
+Seven tools:
 
 - **`list_receipts`** — optional `since`, `until`, `unanalysed`, `unprocessed`,
-  `limit` (1–200, default 50). Returns the matching records as JSON text.
+  `limit` (1–200, default 50). Returns the matching records as JSON text, minus
+  `emailSnippet` (repeated per attachment; use `get_receipt`). Email-sourced rows
+  carry `emailSubject`, `emailFrom`, `originalFilename`, `emailMessageId`.
+  `unprocessed=true` excludes items dismissed with `mark_not_receipt`.
 - **`get_receipt`** — required `id`. Returns the record as JSON text *and* the
   JPEG as base64 image content, so the model can read the receipt in one call.
   The JSON also carries `imageUrl`: `{appOrigin}/api/receipts/:id/image?token=…`,
@@ -921,7 +1001,11 @@ Six tools:
   bytes with a plain `GET`. `GET /api/receipts/:id/image` (§7) accepts this
   token as an alternative to session auth, scoped to that one id; the review
   page keeps using the session path, unchanged. `imageUrl` is additive — the
-  image content block remains for Cowork's own analysis step.
+  image content block remains for Cowork's own analysis step. For an email-sourced
+  receipt the JSON also carries `emailSnippet` and `siblings` (`id`,
+  `originalFilename`, `attachmentIndex`, `processedAt`, `ignoredReason` for each
+  other attachment of the same email) so Cowork can decide whether this item is
+  the receipt.
 - **`create_receipt`** — create a placeholder row (`size_bytes = 0`, no file on
   disk) and return credentials for a follow-up HTTP upload. Optional
   `filename`, `capturedAt`, `mimeType` (default `image/jpeg`).
@@ -946,6 +1030,12 @@ Six tools:
   distinct from `date`) whenever the receipt/invoice states one — it's part
   of the stable shape `src/lib/analysis.ts` reads back (§6.2) and is meant to
   carry through to Manager's purchase invoice `Due date` field.
+- **`mark_not_receipt`** — required `id` and `reason`. For an item that isn't a
+  receipt or invoice (a signature logo, T&Cs, a flyer attached to a receipt
+  email). Sets `ignored_reason` and `processed_at`, deletes nothing, and returns
+  the record. Cowork is told to use it only after viewing the image, and to
+  analyse-and-flag instead when unsure. A person reopens it with "Mark
+  unprocessed" on the review page (§9.3).
 - **`mark_processed`** — required `id`. Sets `processed_at` and returns the
   updated record; does not delete anything. Intended for use once a receipt
   has been recorded downstream (e.g. in an accounting system).
@@ -1110,6 +1200,7 @@ hand-clearing one it missed.
 | `SESSION_SECRET` | Yes | — | HS256 signing key |
 | `DATA_DIR` | No | `{cwd}/data` | DB and images |
 | `NATIVE_APP_REDIRECT` | No | `receipts://auth` | iOS OAuth return |
+| `INBOUND_EMAIL_SECRET` | No | unset (route returns `503`) | Shared bearer between the Cloudflare Email Worker and `/api/inbound/email` (`openssl rand -base64 32`) |
 | `NEXT_BUILD_CPUS` | No | unset | Caps build parallelism |
 | `BUILD_SHA` | No | `unknown` | Docker build arg (not a runtime env var), baked in via `ENV` in the runner stage; short git commit the image was built from |
 | `BUILD_TIME` | No | `unknown` | Docker build arg, baked in the same way; UTC timestamp of the build |
@@ -1198,6 +1289,11 @@ Known and accepted, in rough order of significance:
   iOS data protection and device passcode only.
 - **TLS is the reverse proxy's job.** The container serves plain HTTP on 55666 and
   must not be exposed directly.
+- **Inbound email identity is header-based.** `ALLOWED_USERS` is checked against
+  `X-Forwarded-For`/`From`, which a sender who knows both the receiving address
+  and an allowed email could forge. The real barriers are the unguessable
+  receiving address (long random local part), the Worker-to-app bearer, and the
+  allowlist as a filter on stray mail. DKIM/ARC verification is not implemented.
 
 ---
 
@@ -1209,5 +1305,11 @@ Known and accepted, in rough order of significance:
   alerts if an entry is stuck indefinitely beyond the on-device count.
 - `createSession()` and `deleteSession()` in `src/lib/auth/session.ts` are dead
   code; the OAuth callback and logout route manipulate cookies directly.
+- Inbound email: the `X-Forwarded-For` format and the Gmail confirmation message
+  were written from Gmail's documented behaviour and exercised only against
+  synthetic emails — check the first real forward in the server log (rejected
+  mail logs the addresses it claimed). Receipts that exist only in an email's
+  body (no attachment) are not captured. DKIM/ARC sender verification is not
+  implemented (§11).
 - No automated tests. Correctness of the capture-time stamp and the multipart
   encoding was established by one-off scripts, not a suite.
