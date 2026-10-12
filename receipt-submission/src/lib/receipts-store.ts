@@ -14,28 +14,6 @@ export type ReceiptRecord = {
   analysisJson: string | null;
   analysedAt: string | null;
   processedAt: string | null;
-  /** Set when Cowork judged the item not to be a receipt (e.g. a logo or
-   * terms-and-conditions PDF attached to a receipt email). Such rows are also
-   * marked processed so every existing "unprocessed" queue skips them. */
-  ignoredReason: string | null;
-  /** `"email"` for rows ingested by `/api/inbound/email`, otherwise null. */
-  source: string | null;
-  emailMessageId: string | null;
-  emailSubject: string | null;
-  emailFrom: string | null;
-  emailSnippet: string | null;
-  originalFilename: string | null;
-  attachmentIndex: number | null;
-};
-
-/** Provenance for a receipt that arrived as an email attachment. */
-export type EmailReceiptMeta = {
-  messageId: string;
-  subject: string;
-  from: string;
-  snippet: string;
-  originalFilename: string;
-  attachmentIndex: number;
 };
 
 export type ListReceiptsFilter = {
@@ -56,20 +34,7 @@ type ReceiptRow = {
   analysis_json: string | null;
   analysed_at: string | null;
   processed_at: string | null;
-  ignored_reason: string | null;
-  source: string | null;
-  email_message_id: string | null;
-  email_subject: string | null;
-  email_from: string | null;
-  email_snippet: string | null;
-  original_filename: string | null;
-  attachment_index: number | null;
 };
-
-const RECEIPT_COLUMNS = `id, created_at, submitted_by, filename, mime_type, size_bytes,
-  analysis_json, analysed_at, processed_at, ignored_reason, source,
-  email_message_id, email_subject, email_from, email_snippet,
-  original_filename, attachment_index`;
 
 const globalForStore = globalThis as typeof globalThis & {
   receiptsDb?: DatabaseSync;
@@ -118,30 +83,9 @@ function openDb(): DatabaseSync {
     CREATE INDEX IF NOT EXISTS receipts_created_at ON receipts (created_at);
   `);
   const columns = db.prepare("PRAGMA table_info(receipts)").all() as { name: string }[];
-  // Columns added after the table already existed in production —
-  // CREATE TABLE IF NOT EXISTS above doesn't alter an existing table.
-  const addedColumns: [string, string][] = [
-    ["processed_at", "TEXT"],
-    ["ignored_reason", "TEXT"],
-    ["source", "TEXT"],
-    ["email_message_id", "TEXT"],
-    ["email_subject", "TEXT"],
-    ["email_from", "TEXT"],
-    ["email_snippet", "TEXT"],
-    ["original_filename", "TEXT"],
-    ["attachment_index", "INTEGER"],
-  ];
-  for (const [name, type] of addedColumns) {
-    if (!columns.some((col) => col.name === name)) {
-      db.exec(`ALTER TABLE receipts ADD COLUMN ${name} ${type}`);
-    }
+  if (!columns.some((col) => col.name === "processed_at")) {
+    db.exec("ALTER TABLE receipts ADD COLUMN processed_at TEXT");
   }
-  // One row per (email, attachment) — makes a retried delivery idempotent.
-  db.exec(`
-    CREATE UNIQUE INDEX IF NOT EXISTS receipts_email_attachment
-      ON receipts (email_message_id, attachment_index)
-      WHERE email_message_id IS NOT NULL
-  `);
   globalForStore.receiptsDb = db;
   return db;
 }
@@ -157,14 +101,6 @@ function mapRow(row: ReceiptRow): ReceiptRecord {
     analysisJson: row.analysis_json,
     analysedAt: row.analysed_at,
     processedAt: row.processed_at,
-    ignoredReason: row.ignored_reason,
-    source: row.source,
-    emailMessageId: row.email_message_id,
-    emailSubject: row.email_subject,
-    emailFrom: row.email_from,
-    emailSnippet: row.email_snippet,
-    originalFilename: row.original_filename,
-    attachmentIndex: row.attachment_index,
   };
 }
 
@@ -173,12 +109,22 @@ export async function saveReceipt(input: {
   submittedBy: string;
   filename: string;
   mimeType: string;
-  email?: EmailReceiptMeta;
 }): Promise<ReceiptRecord> {
   const db = openDb();
   const id = randomUUID();
   const createdAt = new Date().toISOString();
   const mimeType = input.mimeType || "image/jpeg";
+  const record: ReceiptRecord = {
+    id,
+    createdAt,
+    submittedBy: input.submittedBy,
+    filename: input.filename,
+    mimeType,
+    sizeBytes: input.bytes.length,
+    analysisJson: null,
+    analysedAt: null,
+    processedAt: null,
+  };
 
   const dest = imagePath(id);
   await writeFile(dest, input.bytes);
@@ -186,10 +132,8 @@ export async function saveReceipt(input: {
   try {
     db.prepare(
       `INSERT INTO receipts (
-        id, created_at, submitted_by, filename, mime_type, size_bytes,
-        source, email_message_id, email_subject, email_from, email_snippet,
-        original_filename, attachment_index
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, created_at, submitted_by, filename, mime_type, size_bytes
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       createdAt,
@@ -197,48 +141,13 @@ export async function saveReceipt(input: {
       input.filename,
       mimeType,
       input.bytes.length,
-      input.email ? "email" : null,
-      input.email?.messageId ?? null,
-      input.email?.subject ?? null,
-      input.email?.from ?? null,
-      input.email?.snippet ?? null,
-      input.email?.originalFilename ?? null,
-      input.email?.attachmentIndex ?? null,
     );
   } catch (err) {
     await unlink(dest).catch(() => undefined);
     throw err;
   }
 
-  return getReceipt(id)!;
-}
-
-/** Existing row for an email attachment, if a previous delivery stored it. */
-export function findEmailReceipt(
-  messageId: string,
-  attachmentIndex: number,
-): ReceiptRecord | null {
-  const row = openDb()
-    .prepare(
-      `SELECT ${RECEIPT_COLUMNS} FROM receipts
-       WHERE email_message_id = ? AND attachment_index = ?`,
-    )
-    .get(messageId, attachmentIndex) as ReceiptRow | undefined;
-  return row ? mapRow(row) : null;
-}
-
-/** Other attachments from the same email, so a caller can judge an item in
- * the context of what else arrived with it. Excludes the receipt itself. */
-export function listEmailSiblings(receipt: ReceiptRecord): ReceiptRecord[] {
-  if (!receipt.emailMessageId) return [];
-  const rows = openDb()
-    .prepare(
-      `SELECT ${RECEIPT_COLUMNS} FROM receipts
-       WHERE email_message_id = ? AND id != ?
-       ORDER BY attachment_index`,
-    )
-    .all(receipt.emailMessageId, receipt.id) as ReceiptRow[];
-  return rows.map(mapRow);
+  return record;
 }
 
 /** Row with no image file yet (`size_bytes = 0`). Used by MCP `create_receipt`
@@ -333,7 +242,8 @@ export function listReceipts(filter: ListReceiptsFilter = {}): ReceiptRecord[] {
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = db
     .prepare(
-      `SELECT ${RECEIPT_COLUMNS}
+      `SELECT id, created_at, submitted_by, filename, mime_type, size_bytes,
+              analysis_json, analysed_at, processed_at
        FROM receipts ${where}
        ORDER BY created_at DESC
        LIMIT ?`,
@@ -347,7 +257,9 @@ export function getReceipt(id: string): ReceiptRecord | null {
   const db = openDb();
   const row = db
     .prepare(
-      `SELECT ${RECEIPT_COLUMNS} FROM receipts WHERE id = ?`,
+      `SELECT id, created_at, submitted_by, filename, mime_type, size_bytes,
+              analysis_json, analysed_at, processed_at
+       FROM receipts WHERE id = ?`,
     )
     .get(id) as ReceiptRow | undefined;
   return row ? mapRow(row) : null;
@@ -375,31 +287,9 @@ export function setProcessed(id: string, processed: boolean): ReceiptRecord | nu
     return null;
   }
   const processedAt = processed ? new Date().toISOString() : null;
-  // Un-processing also un-ignores: a human reopening an item Cowork
-  // dismissed as "not a receipt" wants it back in the queue.
   openDb()
-    .prepare(
-      processed
-        ? "UPDATE receipts SET processed_at = ? WHERE id = ?"
-        : "UPDATE receipts SET processed_at = ?, ignored_reason = NULL WHERE id = ?",
-    )
+    .prepare("UPDATE receipts SET processed_at = ? WHERE id = ?")
     .run(processedAt, id);
-  return getReceipt(id);
-}
-
-/** Cowork's verdict that an item is not a receipt (logo, T&Cs, marketing
- * PDF...). Marks it processed — so every "unprocessed" queue skips it — and
- * records why, instead of deleting, so the call can be audited and undone
- * from the UI. */
-export function markNotReceipt(id: string, reason: string): ReceiptRecord | null {
-  if (!getReceipt(id)) {
-    return null;
-  }
-  openDb()
-    .prepare(
-      "UPDATE receipts SET processed_at = ?, ignored_reason = ? WHERE id = ?",
-    )
-    .run(new Date().toISOString(), reason, id);
   return getReceipt(id);
 }
 

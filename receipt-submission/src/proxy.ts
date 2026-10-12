@@ -10,9 +10,6 @@ const PUBLIC_PREFIXES = [
   "/auth/",
   "/health",
   "/api/health",
-  // Authenticated by its own shared-secret bearer (INBOUND_EMAIL_SECRET), not
-  // a session — the caller is the Cloudflare Email Worker.
-  "/api/inbound/",
   "/mcp",
   "/oauth/",
   "/.well-known/",

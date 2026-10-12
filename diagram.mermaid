@@ -10,26 +10,21 @@ flowchart TB
     GW["home-gateway<br/><small>nginx reverse proxy · public TLS</small>"]
 
     subgraph MCP["MCP servers — authenticated (Google OAuth + email allowlist)"]
-        GRM["gmail-relay-mcp<br/><small>search_gmail · relay_attachment</small>"]
         RCM["receipts<br/><small>MCP tools · web review UI · data volume</small>"]
         MGM["manager-mcp<br/><small>create_purchase_invoice · create_journal_entry · list_records</small>"]
     end
 
     RI -->|create_purchase_invoice, attach_receipt| RCM
     RI -->|create_purchase_invoice, list_records| MGM
-    IW -->|search_gmail| GRM
-    IW -->|create_receipt| RCM
+    IW -->|"Gmail connector: search<br/>(attachments not yet supported)"| Gmail
     IW -->|list_records: payments| MGM
     DA -->|create_journal_entry, categorize| MGM
 
     RI & IW & DA -.-> GW
     GW -.-> MCP
 
-    GRM -->|Gmail API, OAuth: gmail.modify| Gmail
     MGM -->|"REST http://manager:8080/api2<br/>(internal docker network)"| Manager
     MGM -->|"hourly: GET /check-for-new-transactions<br/>(mcp user, HTTP Basic)"| Manager
-
-    GRM ==>|"relay_attachment(): download, convert, upload —<br/>bytes skip Cowork entirely"| RCM
 
     RCM ~~~ Gmail
     RCM ~~~ Manager

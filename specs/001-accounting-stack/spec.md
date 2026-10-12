@@ -6,17 +6,17 @@
 
 ## Overview
 
-A small business's books, its receipt archive, and its email all hold pieces of
+A small business's books, its receipt archive, and its bank transactions all hold pieces of
 the same picture, and reconciling them by hand is the tedium this stack exists to
-remove. Manager.io holds the ledger. Receipts holds photographed and relayed
-receipts. Two MCP servers expose the ledger and the mailbox to an AI agent
+remove. Manager.io holds the ledger. Receipts holds photographed
+receipts. Two MCP servers expose the ledger and the receipt archive to an AI agent
 (Claude Cowork) so that filing a receipt, matching it to a bank transaction, and
 attaching it to a purchase invoice can happen without a human moving files
-between four applications.
+between three applications.
 
-This repository is the **assembly**, not the components. It owns how four
-services are built, configured, wired, secured, and started together. Three of
-the four are specified in their own right elsewhere; this spec covers the seams
+This repository is the **assembly**, not the components. It owns how three
+services are built, configured, wired, secured, and started together. Two of
+the three are specified in their own right elsewhere; this spec covers the seams
 between them, which nothing else does.
 
 **Deliberately out of scope**: TLS, public hostnames, and reverse proxying. A
@@ -29,42 +29,42 @@ load-bearing assumption in this document.
 ### User Story 1 - Bring the whole stack up from a clean checkout (Priority: P1)
 
 An operator with a fresh clone, real credentials in hand, runs one command and
-ends up with four healthy services on known ports.
+ends up with three healthy services on known ports.
 
 **Why this priority**: If the stack cannot be stood up reproducibly, nothing else
 in this repository matters. This is the repository's primary deliverable.
 
 **Independent Test**: On a machine with Docker and the secrets files populated,
-run `./deploy.sh` and confirm all four containers reach a running state and the
+run `./deploy.sh` and confirm all three containers reach a running state and the
 two health-checked services respond.
 
 **Acceptance Scenarios**:
 
-1. **Given** all required secrets files exist, **When** the operator runs `./deploy.sh`, **Then** images are built (using layer cache), containers start, and Manager, manager-mcp, receipts, and gmail-relay are all running.
-2. **Given** any of `secrets/manager-mcp.env`, `secrets/receipts.env`, or `secrets/gmail-relay.env` is missing, **When** `./deploy.sh` runs, **Then** it aborts **before** touching Docker, naming each missing file and the `cp`-from-example remedy.
+1. **Given** all required secrets files exist, **When** the operator runs `./deploy.sh`, **Then** images are built (using layer cache), containers start, and Manager, manager-mcp, and receipts are all running.
+2. **Given** either of `secrets/manager-mcp.env` or `secrets/receipts.env` is missing, **When** `./deploy.sh` runs, **Then** it aborts **before** touching Docker, naming each missing file and the `cp`-from-example remedy.
 3. **Given** the stack is starting, **When** deploy waits on health, **Then** it polls manager-mcp and receipts for up to 60 seconds and reports each as healthy or timed out without aborting the deployment.
 4. **Given** a successful deployment, **When** it completes, **Then** the operator is shown each service's local port and the common follow-up commands.
 5. **Given** a source or submodule change with no image-tag change, **When** `./deploy.sh` runs, **Then** the affected image is rebuilt anyway — an image existing locally is never taken as evidence it is current.
 
 ---
 
-### User Story 2 - Expose the books and the mailbox to an AI agent, safely (Priority: P1)
+### User Story 2 - Expose the books and the receipt archive to an AI agent, safely (Priority: P1)
 
-The operator's agent needs to query the ledger and relay receipts from email.
+The operator's agent needs to query the ledger and read and file receipts.
 Both MCP servers are reachable from the open internet, so both must admit that
 one agent and nothing else.
 
 **Why this priority**: This is the stack's reason for existing, and it is the
-part with real exposure — an internet-reachable service holding both accounting
-data and full mailbox access.
+part with real exposure — an internet-reachable service holding accounting
+data and financial records.
 
 **Independent Test**: Complete the MCP OAuth flow against each server with a
 non-allowlisted Google account and confirm both refuse.
 
 **Acceptance Scenarios**:
 
-1. **Given** `manager-mcp` and `gmail-relay` both run in HTTP transport, **When** a client connects, **Then** each independently enforces Google OAuth **plus** its own email allowlist, refusing valid Google logins outside that list.
-2. **Given** the stack is deployed, **When** OAuth clients are provisioned, **Then** five distinct Google OAuth clients exist — Manager UI (via home-gateway's oauth2-proxy), manager-mcp, receipts, gmail-relay's MCP-access client, and gmail-relay's Gmail+Drive API client — and none is reused across roles.
+1. **Given** `manager-mcp` and the receipts MCP both run in HTTP transport, **When** a client connects, **Then** each independently enforces Google OAuth **plus** its own email allowlist, refusing valid Google logins outside that list.
+2. **Given** the stack is deployed, **When** OAuth clients are provisioned, **Then** three distinct Google OAuth clients exist — Manager UI (via home-gateway's oauth2-proxy), manager-mcp, and receipts — and none is reused across roles.
 3. **Given** an agent holds an allowlisted identity, **When** it queries manager-mcp, **Then** it can read the books, and can write only within the explicitly configured `MANAGER_MCP_WRITE_SCOPES` / `MANAGER_MCP_DELETE_SCOPES` (both empty by default).
 
 ---
@@ -148,20 +148,18 @@ documented action.
 
 **Composition**
 
-- **FR-001**: The stack MUST define exactly four services: `manager`, `manager-mcp`, `receipts`, and `gmail-relay`, under compose project name `accounting`.
+- **FR-001**: The stack MUST define exactly three services: `manager`, `manager-mcp`, and `receipts`, under compose project name `accounting`.
 - **FR-002**: `manager` MUST build from the pinned `docker-manager.io` submodule fork rather than pulling `chrborg/manager.io:latest`.
 - **FR-003**: `manager-mcp` and `receipts` MUST build from their sibling package directories with no vendoring of source.
-- **FR-004**: Services MUST publish fixed host ports: Manager 55667, receipts 55666, manager-mcp 55668, gmail-relay 55669.
+- **FR-004**: Services MUST publish fixed host ports: Manager 55667, receipts 55666, manager-mcp 55668.
 - **FR-005**: All services MUST use `restart: unless-stopped`.
 - **FR-006**: `manager-mcp` MUST declare a dependency on `manager`.
 - **FR-007**: Persistent state MUST live in host bind mounts — `./data/manager` → `/data`, `./data/receipts` → `/app/data` — overridable via `MANAGER_DATA_DIR` / `RECEIPTS_DATA_DIR`.
-- **FR-008**: gmail-relay's Google credentials MUST be mounted read-only at `/secrets`, and its scratch space MUST be a named volume, not a bind mount.
 
 **Configuration and secrets**
 
 - **FR-009**: Secrets MUST live in `secrets/*.env`, be gitignored, be mode 0600, and never be committed; each MUST ship a committed `.example` counterpart.
 - **FR-010**: Non-secret configuration MUST be set inline in `compose.yaml`; only credentials belong in env files.
-- **FR-011**: Google API credentials MUST live at `secrets/gmail/`, gitignored entirely.
 - **FR-012**: `secrets/manager.env` MUST exist as a layout placeholder only — the Manager image documents no env-based secrets, and its API token is generated inside the Manager UI.
 
 **Deployment**
@@ -176,7 +174,7 @@ documented action.
 **Authentication**
 
 - **FR-019**: Both MCP servers MUST enforce Google OAuth plus an independent email allowlist.
-- **FR-020**: The five OAuth clients MUST be distinct, each scoped to one role.
+- **FR-020**: The three OAuth clients MUST be distinct, each scoped to one role.
 - **FR-021**: manager-mcp MUST default to no write and no delete scopes.
 - **FR-022**: Manager UI action and `/api4` endpoints MUST authenticate via HTTP Basic Auth as a dedicated restricted Manager user, since `MANAGER_API_KEY` covers only `/api2`.
 - **FR-023**: That Manager user MUST be a Restricted user granted only Purchase Invoices (View/Create/Update) and Bank and Cash Accounts (View), because its credentials live in a plaintext env file.
@@ -197,7 +195,6 @@ documented action.
 - **Manager.io server**: the accounting system of record. All ledger state lives in its `/data` volume (`Businesses/`, `Blobs/`).
 - **manager-mcp**: MCP interface to the books — read tools, scope-gated writes, receipt attachment, and the hourly bank-feed trigger. Specified separately at `manager-mcp/specs/001-manager-readonly-mcp/`.
 - **receipt-submission**: the receipt archive — mobile capture, JPEG storage, SQLite metadata, and its own MCP surface. Specified at `specs/003-receipt-submission/`.
-- **gmail-relay**: relays email attachments and Drive files into the archive without their bytes entering an LLM's context. Specified at `specs/002-gmail-relay-mcp/`.
 - **Secrets directory**: the deployment's trust root; every credential the stack holds.
 - **Data directory**: the stack's durable state; the only thing whose loss is unrecoverable.
 - **home-gateway**: external project owning TLS, public hostnames, and the oauth2-proxy in front of the Manager UI. Consumes this stack's fixed host ports.
@@ -207,7 +204,7 @@ documented action.
 
 ### Measurable Outcomes
 
-- **SC-001**: A fresh clone with populated secrets reaches four running services with one command and no manual compose invocations.
+- **SC-001**: A fresh clone with populated secrets reaches three running services with one command and no manual compose invocations.
 - **SC-002**: A missing or malformed secret is reported by name before any container starts.
 - **SC-003**: No Google account outside the configured allowlists can reach either MCP server, despite valid Google logins.
 - **SC-004**: A no-op redeployment does not recreate containers, so routine deploys cause no avoidable downtime.
@@ -223,15 +220,12 @@ documented action.
 - **Docker Compose v2** with BuildKit, on Colima (macOS development) or a system daemon (Linux deployment).
 - **The build host can reach GitHub** at build time, for the Manager submodule build.
 - **Google Cloud OAuth clients are provisioned by a human.** No automation can create them; this is a documented manual prerequisite.
-- **`secrets/gmail/credentials.json` is minted out of band** by `gmail-relay/scripts/gmail_oauth_init.py`, once, on a machine with a browser.
 - **Manager's undocumented UI action endpoints remain stable.** Attachment upload and bank-feed sync depend on interfaces Manager does not document and may change on upgrade.
 - **The components carry their own specs.** manager-mcp and receipt-submission are specified in their own trees; duplicating them here would guarantee drift.
 
 ## Known Discrepancies
 
 - **DISC-001**: `README.md` cites a spec by section (§2, §5, §6, §8, §9, §10, §11, §12) that does not exist in this repository. `compose.yaml:3-4` locates it at `../lilith-accounting/docs/ACCOUNTING_PLATFORM_DEPLOYMENT_SPEC.md` — outside the repo, so those references are unresolvable to anyone cloning this alone. The same section numbers appear in `secrets/*.example`.
-- **DISC-002**: `deploy.sh:141` claims gmail-relay has no health endpoint; it has had `GET /health` since `server.py:82`. Deploy could poll it as it does the other two.
-- **DISC-003**: `secrets/gmail-relay.env.example` refers to `deployment/secrets/gmail/gcp-oauth.keys.json`; the real path has no `deployment/` prefix.
 - **DISC-004**: `secrets/manager-mcp.env.example` carries `BASIQ_USERNAME`/`BASIQ_PASSWORD`, and they select the *primary* bank-feed mechanism (`manager-mcp/src/manager_mcp/bank_feeds.py`) — yet the root `README.md` describes the hourly sync only as the `/check-for-new-transactions` fallback and never mentions Basiq or Aussie Bank Feeds. The stack's main path for importing transactions is undocumented at this level.
 - **DISC-009**: The Aussie Bank Feeds path depends on interfaces reverse-engineered from Manager's own frontend on 2026-08-31 — a third-party Cognito pool, Basiq's API (which requires browser-like headers to evade Cloudflare bot detection), and Manager's undocumented `/api4` batch endpoints. Nothing about this contract is published or version-guaranteed.
 - **DISC-005**: The `manager-mcp` Dockerfile was lint- and unit-tested but never build-verified in a running container (per README) — Docker was unreachable when it was authored.

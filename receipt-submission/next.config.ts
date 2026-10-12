@@ -20,15 +20,10 @@ const nextConfig: NextConfig = {
   // one route that needs it.
   outputFileTracingIncludes: {
     "/api/send": ["./node_modules/pdfjs-dist/legacy/build/**"],
-    "/api/inbound/email": ["./node_modules/pdfjs-dist/legacy/build/**"],
   },
-  experimental: {
-    // proxy.ts runs on every route and buffers the request body, truncating it
-    // past 10 MB by default — which would corrupt a large inbound email
-    // (/api/inbound/email accepts up to 30 MB of raw MIME).
-    proxyClientMaxBodySize: "30mb",
-    ...(Number.isFinite(buildCpus) && buildCpus > 0 ? { cpus: buildCpus } : {}),
-  },
+  ...(Number.isFinite(buildCpus) && buildCpus > 0
+    ? { experimental: { cpus: buildCpus } }
+    : {}),
   turbopack: {
     root: process.cwd(),
   },

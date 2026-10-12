@@ -11,9 +11,7 @@ import {
 import {
   createReceiptPlaceholder,
   getReceipt,
-  listEmailSiblings,
   listReceipts,
-  markNotReceipt,
   markProcessed,
   readReceiptImage,
   saveAnalysis,
@@ -44,7 +42,7 @@ const TOOLS = [
   {
     name: "list_receipts",
     description:
-      "List stored receipts (newest first). Use unanalysed=true to find receipts that still need review. Rows that arrived by email carry emailSubject/emailFrom/originalFilename/emailMessageId; attachments sharing an emailMessageId came in the same email, and not every one is a receipt — see get_receipt and mark_not_receipt.",
+      "List stored receipts (newest first). Use unanalysed=true to find receipts that still need review.",
     inputSchema: {
       type: "object",
       properties: {
@@ -62,8 +60,7 @@ const TOOLS = [
         },
         unprocessed: {
           type: "boolean",
-          description:
-            "If true, only receipts not yet marked processed. Items dismissed with mark_not_receipt count as processed, so they are excluded.",
+          description: "If true, only receipts not yet marked processed",
         },
         limit: {
           type: "integer",
@@ -75,7 +72,7 @@ const TOOLS = [
   {
     name: "get_receipt",
     description:
-      "Fetch one receipt’s metadata and JPEG image for analysis. For a receipt that arrived by email, also returns emailSnippet (start of the email body) and siblings (the other attachments from the same email) so you can judge whether this item is actually a receipt.",
+      "Fetch one receipt’s metadata and JPEG image for analysis.",
     inputSchema: {
       type: "object",
       required: ["id"],
@@ -168,27 +165,6 @@ const TOOLS = [
     },
   },
   {
-    name: "mark_not_receipt",
-    description:
-      "Dismiss an item that is not a receipt or invoice — e.g. a signature logo, terms-and-conditions PDF, or marketing flyer attached to a receipt email. Records the reason and marks it processed so it drops out of unprocessed queues; nothing is deleted, and a person can reopen it from the web UI. Only use after viewing the image; when unsure, analyse it as a receipt and flag it for review instead.",
-    inputSchema: {
-      type: "object",
-      required: ["id", "reason"],
-      properties: {
-        id: { type: "string", description: "Receipt id from list_receipts" },
-        reason: {
-          type: "string",
-          description: "Short explanation, e.g. \"company logo from email signature\"",
-        },
-      },
-    },
-    annotations: {
-      title: "Dismiss as not a receipt",
-      destructiveHint: false,
-      idempotentHint: true,
-    },
-  },
-  {
     name: "mark_processed",
     description:
       "Mark a receipt as processed once it has been recorded downstream (e.g. in your accounting system). Does not delete anything.",
@@ -263,11 +239,8 @@ async function callTool(
       unprocessed: asBool(args.unprocessed),
       limit: asLimit(args.limit),
     });
-    // The email body snippet is repeated on every attachment of an email, so
-    // keep it out of the list and leave it to get_receipt.
-    const slim = rows.map((row) => ({ ...row, emailSnippet: undefined }));
     return {
-      content: [{ type: "text", text: JSON.stringify(slim, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(rows, null, 2) }],
     };
   }
 
@@ -302,22 +275,8 @@ async function callTool(
     // stays for Cowork's own analysis step.
     const imageToken = await createImageAccessToken(id);
     const imageUrl = `${appOrigin()}/api/receipts/${id}/image?token=${imageToken}`;
-    const siblings = listEmailSiblings(receipt).map((s) => ({
-      id: s.id,
-      originalFilename: s.originalFilename,
-      attachmentIndex: s.attachmentIndex,
-      processedAt: s.processedAt,
-      ignoredReason: s.ignoredReason,
-    }));
     const content: ToolContent[] = [
-      {
-        type: "text",
-        text: JSON.stringify(
-          { ...receipt, imageUrl, ...(receipt.emailMessageId ? { siblings } : {}) },
-          null,
-          2,
-        ),
-      },
+      { type: "text", text: JSON.stringify({ ...receipt, imageUrl }, null, 2) },
       {
         type: "image",
         data: bytes.toString("base64"),
@@ -445,27 +404,6 @@ async function callTool(
       };
     }
     const updated = saveAnalysis(id, args.analysis);
-    if (!updated) {
-      return {
-        isError: true,
-        content: [{ type: "text", text: `Receipt not found: ${id}` }],
-      };
-    }
-    return {
-      content: [{ type: "text", text: JSON.stringify(updated, null, 2) }],
-    };
-  }
-
-  if (name === "mark_not_receipt") {
-    const id = typeof args.id === "string" ? args.id.trim() : "";
-    const reason = typeof args.reason === "string" ? args.reason.trim() : "";
-    if (!id || !reason) {
-      return {
-        isError: true,
-        content: [{ type: "text", text: "id and reason are required" }],
-      };
-    }
-    const updated = markNotReceipt(id, reason);
     if (!updated) {
       return {
         isError: true,

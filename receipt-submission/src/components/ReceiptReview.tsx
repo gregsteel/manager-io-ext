@@ -14,7 +14,6 @@ type ReceiptSummary = {
   createdAt: string;
   filename: string;
   processedAt: string | null;
-  ignoredReason: string | null;
   hasAnalysis: boolean;
 };
 
@@ -55,7 +54,6 @@ export function ReceiptReview({
   >({ kind: "idle" });
   const [imageOpen, setImageOpen] = useState(false);
   const [processedAt, setProcessedAt] = useState(receipt.processedAt);
-  const [ignoredReason, setIgnoredReason] = useState(receipt.ignoredReason);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -97,7 +95,6 @@ export function ReceiptReview({
       }
       const { receipt: updated } = await res.json();
       setProcessedAt(updated.processedAt);
-      setIgnoredReason(updated.ignoredReason);
     } catch (err) {
       setStatus({
         kind: "error",
@@ -197,13 +194,7 @@ export function ReceiptReview({
             {analysis.confidenceReason}
           </p>
         ) : null}
-        {ignoredReason ? (
-          <p className="mt-3 rounded-lg bg-black/5 px-3 py-2 text-sm text-muted">
-            <span className="font-medium">Dismissed as not a receipt:</span>{" "}
-            {ignoredReason}. Use &ldquo;Mark unprocessed&rdquo; to put it back in
-            Cowork&apos;s queue.
-          </p>
-        ) : processedAt ? (
+        {processedAt ? (
           <p className="mt-3 rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent-pressed">
             Marked processed on {new Date(processedAt).toLocaleString()}.
             Saving edits the split but won&apos;t re-trigger Cowork.

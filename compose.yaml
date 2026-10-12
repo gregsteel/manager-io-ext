@@ -1,4 +1,4 @@
-# Accounting stack: Manager.io, receipt-submission, manager-mcp, gmail-relay.
+# Accounting stack: Manager.io, receipt-submission, manager-mcp.
 #
 # Deliberately separate from home-gateway (see ../lilith-accounting/docs/
 # ACCOUNTING_PLATFORM_DEPLOYMENT_SPEC.md §2-4). This project owns none of the
@@ -108,51 +108,6 @@ services:
       APP_ENV: prod
       DATA_DIR: /app/data
 
-  gmail-relay:
-    # Sibling package (./gmail-relay) — a FastMCP server (search + relay-to-
-    # Receipts exposed as MCP tools, not plain REST) secured the same way as
-    # manager-mcp: AllowlistedGoogleProvider, i.e. the MCP OAuth spec plus an
-    # email allowlist (see manager-mcp/src/manager_mcp/http_auth.py, mirrored
-    # in gmail-relay/src/gmail_relay/http_auth.py).
-    #
-    # Two distinct Google OAuth clients are involved, not one:
-    #   - secrets/gmail/credentials.json: Gmail + Drive API access
-    #     via gmail.modify (read messages/attachments, mark a message read
-    #     after its attachment is relayed) and drive (download a file and
-    #     delete it after a successful Receipts relay). Self-contained (holds
-    #     its own client_id/secret/refresh_token) and minted once via
-    #     ./gmail-relay/scripts/gmail_oauth_init.py (stdlib-only OAuth
-    #     loopback flow — no npm/klodr dependency at runtime or setup time).
-    #     secrets/gmail/gcp-oauth.keys.json is only that script's
-    #     input, not read by the running container — GMAIL_OAUTH_KEYS_PATH
-    #     isn't a thing.
-    #   - GMAIL_RELAY_OAUTH_GOOGLE_CLIENT_ID/SECRET (in gmail-relay.env): a
-    #     *separate* OAuth client that gates who may connect to this server as
-    #     an MCP client at all (checked against GMAIL_RELAY_ALLOWED_EMAILS).
-    build:
-      context: ./gmail-relay
-    container_name: accounting-gmail-relay
-    restart: unless-stopped
-    ports:
-      - "55669:8080"
-    volumes:
-      - ./secrets/gmail:/secrets:ro
-      - gmail-relay-tmp:/data/tmp
-      # Same reasoning as manager-mcp's oauth-proxy mount above: persists
-      # FastMCP's OAuthProxy file store (registered clients, refresh
-      # tokens) across container recreates so callers don't get forced
-      # through a full re-auth every deploy.
-      - ./secrets/gmail-relay-oauth:/root/.local/share/fastmcp
-    env_file:
-      - ./secrets/gmail-relay.env
-    environment:
-      GMAIL_RELAY_TRANSPORT: http
-      GMAIL_RELAY_HTTP_HOST: 0.0.0.0
-      GMAIL_RELAY_HTTP_PORT: "8080"
-      GMAIL_CREDENTIALS_PATH: /secrets/credentials.json
-      RELAY_DOWNLOAD_DIR: /data/tmp
-      RELAY_MAX_ATTACHMENT_BYTES: "15728640"
-
   webhook:
     # Auto-deploy on push to main. Not exposed publicly (127.0.0.1 only) —
     # reached exclusively through an authenticated `gh webhook forward`
@@ -203,6 +158,3 @@ services:
       # Lets deploy.sh's `docker compose` calls control the *host* daemon —
       # see the docker.sock caveat in this service's comment above.
       - /var/run/docker.sock:/var/run/docker.sock
-
-volumes:
-  gmail-relay-tmp:

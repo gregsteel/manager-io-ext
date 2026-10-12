@@ -54,7 +54,7 @@ ensure_docker() {
 
 check_secrets() {
     local missing=()
-    for f in manager-mcp receipts gmail-relay; do
+    for f in manager-mcp receipts; do
         [ -f "secrets/$f.env" ] || missing+=("secrets/$f.env")
     done
     if [ ${#missing[@]} -gt 0 ]; then
@@ -114,7 +114,7 @@ export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # container out from under the very process running it — killing the
 # deploy mid-flight before ./deploy.sh finishes (SIGTERM, exit unfinished).
 # `webhook` is started/rebuilt independently — see webhook/README.md.
-APP_SERVICES="manager manager-mcp receipts gmail-relay"
+APP_SERVICES="manager manager-mcp receipts"
 
 case "$ACTION" in
 status)
@@ -175,13 +175,6 @@ else
 fi
 wait_for_health "manager-mcp" "$MANAGER_MCP_HEALTH_URL"
 wait_for_health "receipts" "$RECEIPTS_HEALTH_URL"
-# gmail-relay has no documented health endpoint (see README) — just confirm the
-# container is up.
-if docker compose ps --status running gmail-relay 2>/dev/null | grep -q gmail-relay; then
-    echo "✅ gmail-relay is running (no health endpoint to poll — verify manually)"
-else
-    echo "⚠️  gmail-relay does not appear to be running — check: docker compose logs gmail-relay"
-fi
 # manager has no documented health endpoint (see README) — just confirm the
 # container is up.
 if docker compose ps --status running manager 2>/dev/null | grep -q manager; then
@@ -197,7 +190,6 @@ echo "📱 Local ports (home-gateway proxies these — see its .env for public h
 echo "   Manager:     http://localhost:55667"
 echo "   Manager MCP: http://localhost:55668"
 echo "   Receipts:    http://localhost:55666"
-echo "   Gmail relay: http://localhost:55669"
 echo ""
 echo "ℹ️  webhook is not managed by this script (see webhook/README.md) —"
 echo "   bring it up once with: docker compose up -d webhook"

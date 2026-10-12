@@ -18,13 +18,6 @@ function status(receipt: ReceiptRecord): {
   className: string;
   reason: string;
 } {
-  if (receipt.ignoredReason) {
-    return {
-      label: "Not a receipt",
-      className: "bg-black/5 text-muted",
-      reason: receipt.ignoredReason,
-    };
-  }
   if (receipt.processedAt) {
     return { label: "Processed", className: "bg-success/10 text-success", reason: "" };
   }
@@ -135,11 +128,6 @@ export default async function ReceiptsPage({
                     <p className="truncate text-sm font-medium text-foreground">
                       {receipt.filename}
                     </p>
-                    {receipt.emailSubject ? (
-                      <p className="mt-0.5 truncate text-xs text-muted">
-                        ✉ {receipt.emailSubject}
-                      </p>
-                    ) : null}
                     <p className="mt-0.5 text-xs text-muted">
                       {new Date(receipt.createdAt).toLocaleString()} ·{" "}
                       {receipt.submittedBy}
@@ -150,13 +138,7 @@ export default async function ReceiptsPage({
                       {s.label}
                     </span>
                     {s.reason ? (
-                      <p
-                        className={`mt-1 truncate text-xs ${
-                          receipt.ignoredReason ? "text-muted" : "text-danger"
-                        }`}
-                      >
-                        {s.reason}
-                      </p>
+                      <p className="mt-1 truncate text-xs text-danger">{s.reason}</p>
                     ) : null}
                   </div>
                   {vendor ? (
