@@ -19,7 +19,7 @@ here holds a Google credential, so nothing here expires.
    ```sh
    cd email-worker
    npm install
-   # edit INBOUND_URL in wrangler.toml
+   cp wrangler.toml.example wrangler.toml   # gitignored; set INBOUND_URL to your receipts host
    npx wrangler secret put INBOUND_EMAIL_SECRET   # same value as step 1
    npx wrangler deploy
    ```

@@ -55,3 +55,6 @@ xcuserdata/
 # Real HMAC secret lives here, copied from hooks.json.example.
 /webhook/hooks.json
 !/webhook/hooks.json.example
+
+# Worker config holds the real receipts hostname; copy from wrangler.toml.example
+email-worker/wrangler.toml
